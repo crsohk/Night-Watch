@@ -285,6 +285,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   });
   delete settings.phones; delete settings.quickDial;
   settings.shortcutName = settings.shortcutName || 'DutyCall';
+  if (settings.ambient === undefined) settings.ambient = true; // 잔잔한 소리 기본 켜짐
   settings.pickShortcut = settings.pickShortcut || 'PickContact';
   saveSet();
 
@@ -335,7 +336,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     logSheet: $('logSheet'), logList: $('logList'), logCount: $('logCount'),
     btnEndShift: $('btnEndShift'), logClose: $('logClose'),
     dlg: $('dlg'), dlgText: $('dlgText'), dlgSub: $('dlgSub'), dlgOk: $('dlgOk'), dlgNo: $('dlgNo'),
-    toast: $('toast'), btnRefresh: $('btnRefresh'), tkA: $('tkA'), tkB: $('tkB')
+    toast: $('toast'), btnRefresh: $('btnRefresh'), btnMusic: $('btnMusic'), tkA: $('tkA'), tkB: $('tkB')
   };
 
   /* ---------- Views ---------- */
@@ -906,6 +907,79 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       })
       .catch(function () { renderTicker(); });
   }
+
+  /* ---------- Calm ambient sound (generative, offline) ---------- */
+  var audioCtx = null, ambientOn = false, ambientNodes = null, noteTimer = null;
+  var SCALE = [220, 261.63, 293.66, 329.63, 392, 440, 523.25]; // A minor pentatonic-ish
+  function startAmbient() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume();
+      var master = audioCtx.createGain(); master.gain.value = 0;
+      var filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass'; filter.frequency.value = 1200;
+      master.connect(filter); filter.connect(audioCtx.destination);
+      var drones = [[110, 0.05], [164.81, 0.035], [220, 0.02]].map(function (cfg) {
+        var o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = cfg[0];
+        var g = audioCtx.createGain(); g.gain.value = cfg[1];
+        var lfo = audioCtx.createOscillator(); lfo.frequency.value = 1 / 9; // breathe with the battery
+        var lg = audioCtx.createGain(); lg.gain.value = cfg[1] * 0.5;
+        lfo.connect(lg); lg.connect(g.gain);
+        o.connect(g); g.connect(master);
+        o.start(); lfo.start();
+        return { o: o, lfo: lfo };
+      });
+      master.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 2.5);
+      ambientNodes = { master: master, drones: drones };
+      ambientOn = true;
+      scheduleNote();
+      els.btnMusic.classList.add('on');
+    } catch (e) { toast('Audio unavailable'); }
+  }
+  function scheduleNote() {
+    noteTimer = setTimeout(function () {
+      if (!ambientOn || !ambientNodes) return;
+      var f = SCALE[Math.floor(Math.random() * SCALE.length)] * (Math.random() < 0.3 ? 2 : 1);
+      var o = audioCtx.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+      var g = audioCtx.createGain(); g.gain.value = 0;
+      o.connect(g); g.connect(ambientNodes.master);
+      var t = audioCtx.currentTime;
+      g.gain.linearRampToValueAtTime(0.045, t + 1.8);
+      g.gain.linearRampToValueAtTime(0, t + 7);
+      o.start(t); o.stop(t + 7.2);
+      scheduleNote();
+    }, 5000 + Math.random() * 9000);
+  }
+  function stopAmbient() {
+    ambientOn = false;
+    clearTimeout(noteTimer);
+    if (ambientNodes && audioCtx) {
+      var n = ambientNodes;
+      n.master.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.2);
+      setTimeout(function () {
+        n.drones.forEach(function (d) { try { d.o.stop(); d.lfo.stop(); } catch (e) {} });
+      }, 1400);
+      ambientNodes = null;
+    }
+    els.btnMusic.classList.remove('on');
+  }
+  els.btnMusic.addEventListener('click', function () {
+    settings.ambient = !ambientOn;
+    saveSet();
+    if (ambientOn) stopAmbient(); else startAmbient();
+  });
+  // iOS는 터치 전 소리를 막으므로, 첫 터치(아무 곳)에 자동 시작
+  function armAmbient() {
+    if (settings.ambient && !ambientOn) startAmbient();
+  }
+  document.addEventListener('pointerdown', armAmbient, { passive: true });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden' && ambientOn) stopAmbient();
+    else if (document.visibilityState === 'visible' && settings.ambient && !ambientOn) {
+      try { startAmbient(); } catch (e) { /* 다음 터치 때 armAmbient가 처리 */ }
+    }
+  });
+  if (settings.ambient) els.btnMusic.classList.add('on'); // 시작 전에도 상태 표시
 
   /* ---------- Dark mode toggle ---------- */
   var SUN_ICON = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';

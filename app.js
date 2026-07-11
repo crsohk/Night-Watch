@@ -269,7 +269,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   var wxCache = load(LS_WX);
   var newsCache = load(LS_NEWS);
   var activeTab = 'watch';
-  var lastMsgKey = '', wakeLock = null, wakeWanted = false;
+  var lastMsgKey = '';
 
   function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
   function save() { localStorage.setItem(LS_STATE, JSON.stringify(state)); }
@@ -278,7 +278,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   /* ---------- DOM ---------- */
   function $(id) { return document.getElementById(id); }
   var els = {
-    date: $('hdrDate'), clock: $('hdrClock'), wakeBtn: $('wakeBtn'),
+    date: $('hdrDate'), clock: $('hdrClock'), btnDark: $('btnDark'),
     vStandby: $('view-standby'), vActive: $('view-active'), vDone: $('view-done'), vHistory: $('view-history'),
     greetTitle: $('greetTitle'), greetSub: $('greetSub'), sugBox: $('sugBox'), wxStandby: $('wxStandby'),
     leafMarkers: $('leafMarkers'),
@@ -315,7 +315,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     var now = new Date();
     if (state.current && now.getTime() > state.current.end + 12 * HOUR) archive(false);
     document.body.classList.toggle('dawn', state.current ? phase(now) === 'done' : false);
-    els.wakeBtn.style.visibility = (state.current && phase(now) === 'active' && 'wakeLock' in navigator) ? 'visible' : 'hidden';
+    document.body.classList.toggle('phase-active', activeTab === 'watch' && phase(now) === 'active');
     if (activeTab === 'history') { show('vHistory'); renderHistory(); }
     else {
       var ph = phase(now);
@@ -445,18 +445,18 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   }
 
   /* ---------- Muhwanja leaf call counter ---------- */
-  var LEAF_POSITIONS = [ // image-percent coords, clockwise from upper-left leaf
-    { x: 36,   y: 35, w: 9   },
-    { x: 44.5, y: 32, w: 9.5 },
-    { x: 53,   y: 31, w: 10  },
-    { x: 62,   y: 32, w: 9.5 },
-    { x: 71,   y: 35, w: 9   },
-    { x: 82,   y: 58, w: 10  },
-    { x: 71,   y: 61, w: 9   },
-    { x: 62,   y: 63, w: 9.5 },
-    { x: 52,   y: 65, w: 10  },
-    { x: 43,   y: 65, w: 9.5 },
-    { x: 34,   y: 63, w: 9   }
+  var LEAF_POSITIONS = [ // cropped-image percent coords, clockwise from upper-left leaf
+    { x: 31.1, y: 31.6, w: 9   },
+    { x: 40.6, y: 28.4, w: 9.5 },
+    { x: 50.0, y: 27.4, w: 10  },
+    { x: 60.0, y: 28.4, w: 9.5 },
+    { x: 70.0, y: 31.6, w: 9   },
+    { x: 79.0, y: 53.5, w: 10  },
+    { x: 70.0, y: 58.9, w: 9   },
+    { x: 60.0, y: 61.1, w: 9.5 },
+    { x: 48.9, y: 63.2, w: 10  },
+    { x: 38.9, y: 63.2, w: 9.5 },
+    { x: 28.9, y: 61.1, w: 9   }
   ];
   function renderLeafCalls() {
     if (!els.leafMarkers) return;
@@ -470,8 +470,8 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       if (i === LEAF_POSITIONS.length - 1 && total > LEAF_POSITIONS.length) {
         label = String(total); // 12th call onward: last leaf shows the running total
       }
-      var sizeVw = pos.w * 0.66;
-      var markerSize = 'clamp(20px,' + sizeVw.toFixed(2) + 'vw,40px)';
+      var sizeVw = pos.w * 0.44; // 잎 너비의 약 2/3에서 다시 2/3로 축소
+      var markerSize = 'clamp(13px,' + sizeVw.toFixed(2) + 'vw,27px)';
       html += '<span class="leaf-marker" style="left:' + pos.x + '%;top:' + pos.y +
         '%;--marker-size:' + markerSize + ';">' + label + '</span>';
     }
@@ -870,26 +870,20 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       .catch(function () { renderTicker(); });
   }
 
-  /* ---------- Keep screen on ---------- */
-  if ('wakeLock' in navigator) {
-    els.wakeBtn.addEventListener('click', function () {
-      wakeWanted = !wakeWanted;
-      if (wakeWanted) acquireWake(); else releaseWake();
-    });
-    document.addEventListener('visibilitychange', function () {
-      if (wakeWanted && document.visibilityState === 'visible') acquireWake();
-    });
+  /* ---------- Dark mode toggle ---------- */
+  var SUN_ICON = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
+  var MOON_ICON = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
+  function applyDark() {
+    document.body.classList.toggle('dark', !!settings.dark);
+    $('darkIcon').innerHTML = settings.dark ? SUN_ICON : MOON_ICON;
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', settings.dark ? '#14100A' : '#F0E9DA');
   }
-  function acquireWake() {
-    navigator.wakeLock.request('screen').then(function (wl) {
-      wakeLock = wl;
-      els.wakeBtn.classList.add('on');
-    }).catch(function () { wakeWanted = false; });
-  }
-  function releaseWake() {
-    if (wakeLock) { wakeLock.release(); wakeLock = null; }
-    els.wakeBtn.classList.remove('on');
-  }
+  els.btnDark.addEventListener('click', function () {
+    settings.dark = !settings.dark;
+    saveSet();
+    applyDark();
+  });
 
   /* ---------- Tabs ---------- */
   document.querySelectorAll('.tab').forEach(function (t) {
@@ -937,6 +931,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   window.addEventListener('online', function () { fetchWeather(true); fetchNews(true); });
 
   /* ---------- Boot ---------- */
+  applyDark();
   renderHeader(new Date());
   lastPhase = state.current ? phase(new Date()) : 'standby';
   renderAll();

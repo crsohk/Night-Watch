@@ -1038,18 +1038,25 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       if (ambientOn) scheduleLagrima();
     }, totalMs);
   }
+  function actuallyStart() {
+    if (ambientOn) return;
+    if (audioCtx.state !== 'running') return; // 제스처 전이면 대기 (다음 터치가 재시도)
+    guitarMaster = audioCtx.createGain();
+    guitarMaster.gain.value = 0;
+    var comp = audioCtx.createDynamicsCompressor();
+    guitarMaster.connect(comp); comp.connect(audioCtx.destination);
+    guitarMaster.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 1.5);
+    ambientOn = true;
+    scheduleLagrima();
+    els.btnMusic.classList.add('on');
+    toast('\u266A L\u00E1grima \u00B7 after T\u00E1rrega');
+  }
   function startAmbient() {
     try {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      audioCtx.resume();
-      guitarMaster = audioCtx.createGain();
-      guitarMaster.gain.value = 0;
-      var comp = audioCtx.createDynamicsCompressor();
-      guitarMaster.connect(comp); comp.connect(audioCtx.destination);
-      guitarMaster.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 1.5);
-      ambientOn = true;
-      scheduleLagrima();
-      els.btnMusic.classList.add('on');
+      var p = audioCtx.resume();
+      if (p && p.then) p.then(actuallyStart).catch(function () {});
+      actuallyStart();
     } catch (e) { toast('Audio unavailable'); }
   }
   function stopAmbient() {

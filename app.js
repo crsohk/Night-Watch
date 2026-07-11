@@ -4,9 +4,46 @@
 
 /* ================= Constants ================= */
 var SHIFT_DEFS = {
-  night:   { key: 'night',   label: 'NIGHT SHIFT', startHour: 19, durH: 12 }, // Mon-Fri 19:00 → +12h
-  weekend: { key: 'weekend', label: 'WEEKEND 24H', startHour: 7,  durH: 24 }  // Sat/Sun 07:00 → +24h
+  night:   { key: 'night',   label: 'NIGHT SHIFT', startHour: 19, durH: 12 }, // workday 19:00 → +12h
+  weekend: { key: 'weekend', label: '24H SHIFT',   startHour: 7,  durH: 24 }  // weekend/holiday 07:00 → +24h
 };
+
+/* Korean public holidays 2026-2030 (substitutes included; ad-hoc holidays like
+   election days cannot be predicted and are treated as workdays) */
+var KR_HOLIDAYS = {};
+[
+  // 2026
+  '2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02',
+  '2026-05-05','2026-05-24','2026-05-25','2026-06-06','2026-08-15','2026-08-17',
+  '2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-10-09','2026-12-25',
+  // 2027
+  '2027-01-01','2027-02-06','2027-02-07','2027-02-08','2027-02-09','2027-03-01',
+  '2027-05-05','2027-05-13','2027-06-06','2027-08-15','2027-08-16',
+  '2027-09-14','2027-09-15','2027-09-16','2027-10-03','2027-10-04','2027-10-09','2027-10-11',
+  '2027-12-25','2027-12-27',
+  // 2028
+  '2028-01-01','2028-01-26','2028-01-27','2028-01-28','2028-03-01',
+  '2028-05-02','2028-05-05','2028-06-06','2028-08-15',
+  '2028-10-02','2028-10-03','2028-10-04','2028-10-05','2028-10-09','2028-12-25',
+  // 2029
+  '2029-01-01','2029-02-12','2029-02-13','2029-02-14','2029-03-01',
+  '2029-05-05','2029-05-07','2029-05-20','2029-05-21','2029-06-06','2029-08-15',
+  '2029-09-21','2029-09-22','2029-09-23','2029-09-24','2029-10-03','2029-10-09','2029-12-25',
+  // 2030
+  '2030-01-01','2030-02-02','2030-02-03','2030-02-04','2030-02-05','2030-03-01',
+  '2030-05-05','2030-05-06','2030-05-09','2030-06-06','2030-08-15',
+  '2030-09-11','2030-09-12','2030-09-13','2030-10-03','2030-10-09','2030-12-25'
+].forEach(function (d) { KR_HOLIDAYS[d] = 1; });
+
+function ymd(d) {
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+/* Red day = Sat/Sun or Korean public holiday → 24h duty starts at 07:00 */
+function isRedDay(d) {
+  var day = d.getDay();
+  if (day === 0 || day === 6) return true;
+  return !!KR_HOLIDAYS[ymd(d)];
+}
 var HOSPITAL = { name: 'SNUBH GS', short: 'BUNDANG', lat: 37.352, lon: 127.125 };
 var NAME_ROLES = [ // dial by saved number, or by name via Shortcuts
   { k: 'gw1', label: 'GW1' }, { k: 'gw2', label: 'GW2' },
@@ -80,10 +117,10 @@ function percent(now, start, end) {
   return Math.max(0, Math.min(1, p));
 }
 
-/* Calendar-based detection: night shifts start Mon-Fri, weekend 24h shifts start Sat/Sun. */
+/* Calendar-based detection: night shifts start on workdays,
+   24h shifts start on weekends and Korean public holidays. */
 function plausibleStart(type, d) {
-  var day = d.getDay();
-  return type === 'night' ? (day >= 1 && day <= 5) : (day === 0 || day === 6);
+  return type === 'night' ? !isRedDay(d) : isRedDay(d);
 }
 /* Single suggestion: the window containing now (calendar-consistent),
    otherwise the nearest upcoming plausible window. */
@@ -342,7 +379,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   }
   function renderStandby(now) {
     els.greetTitle.textContent = greet(now);
-    els.greetSub.textContent = 'Weeknights 19:00 → 07:00 · Weekends 07:00 → 07:00. The app reads the calendar and backdates automatically.';
+    els.greetSub.textContent = 'Workdays 19:00 → 07:00 · Weekends & KR holidays 07:00 → 07:00. Detected automatically.';
     var s = suggest(now)[0];
     var moonIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A9762F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
     var sunIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A9762F" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
@@ -446,17 +483,17 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
 
   /* ---------- Muhwanja leaf call counter ---------- */
   var LEAF_POSITIONS = [ // cropped-image percent coords, clockwise from upper-left leaf
-    { x: 31.1, y: 31.6, w: 9   },
-    { x: 40.6, y: 28.4, w: 9.5 },
-    { x: 50.0, y: 27.4, w: 10  },
-    { x: 60.0, y: 28.4, w: 9.5 },
-    { x: 70.0, y: 31.6, w: 9   },
-    { x: 79.0, y: 53.5, w: 10  },
-    { x: 70.0, y: 58.9, w: 9   },
-    { x: 60.0, y: 61.1, w: 9.5 },
-    { x: 48.9, y: 63.2, w: 10  },
-    { x: 38.9, y: 63.2, w: 9.5 },
-    { x: 28.9, y: 61.1, w: 9   }
+    { x: 31.1, y: 26.7, w: 9   },
+    { x: 40.6, y: 23.3, w: 9.5 },
+    { x: 50.0, y: 22.2, w: 10  },
+    { x: 60.0, y: 23.3, w: 9.5 },
+    { x: 70.0, y: 26.7, w: 9   },
+    { x: 79.0, y: 50.5, w: 10  },
+    { x: 70.0, y: 56.4, w: 9   },
+    { x: 60.0, y: 58.8, w: 9.5 },
+    { x: 48.9, y: 61.1, w: 10  },
+    { x: 38.9, y: 61.1, w: 9.5 },
+    { x: 28.9, y: 58.8, w: 9   }
   ];
   function renderLeafCalls() {
     if (!els.leafMarkers) return;
@@ -949,7 +986,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
 /* ================= Exports for node tests ================= */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    SHIFT_DEFS: SHIFT_DEFS, plausibleStart: plausibleStart,
+    SHIFT_DEFS: SHIFT_DEFS, plausibleStart: plausibleStart, isRedDay: isRedDay,
     shiftWindow: shiftWindow, windowForStart: windowForStart,
     percent: percent, suggest: suggest, fmtHMS: fmtHMS, fmtDur: fmtDur,
     busiestHour: busiestHour, wmo: wmo, wxIndexFor: wxIndexFor,

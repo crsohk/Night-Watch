@@ -143,7 +143,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
 @keyframes pulse{0%{transform:scale(1);}35%{transform:scale(1.06);}100%{transform:scale(1);}}
 
 /* ---------- Muhwanja call tree ---------- */
-.call-tree{position:relative;flex:none;width:100%;aspect-ratio:1260/571;
+.call-tree{position:relative;flex:none;width:100%;aspect-ratio:1260/525;
   margin-top:10px;overflow:hidden;border-radius:18px;
   background:rgba(255,252,243,.38);border:1px solid var(--line-soft);
   isolation:isolate;}
@@ -152,7 +152,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
   object-fit:cover;object-position:center;display:block;
   pointer-events:none;user-select:none;-webkit-user-drag:none;}
 .tree-call-btn{position:absolute;z-index:4;
-  left:10%;top:58%;
+  left:10%;top:55.4%;
   transform:translate(-50%,-50%);
   width:64px;height:64px;border-radius:50%;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
@@ -369,7 +369,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
 body.tight .bat-track{height:clamp(84px,11dvh,108px);}
 body.tight .bat-pct span{font-size:clamp(32px,4.6dvh,42px);}
 body.tight .bat-block{margin-top:6px;}
-body.tight .call-tree{max-width:86%;margin-left:auto;margin-right:auto;margin-top:7px;}
+body.tight .call-tree{margin-top:7px;}
 body.tight .msg{margin-top:7px;min-height:46px;}
 body.tight .line-sec{margin-top:7px;}
 body.tight .wx{margin-top:8px;}
@@ -381,7 +381,7 @@ body.tighter .meta-c{display:none;}
 body.tighter .bat-track{height:80px;}
 body.tighter .bat-pct span{font-size:30px;}
 body.tighter .bat-in{bottom:5px;}
-body.tighter .call-tree{max-width:72%;}
+body.tighter .call-tree{max-width:88%;margin-left:auto;margin-right:auto;}
 body.tighter .tree-call-btn{width:52px;height:52px;}
 body.tighter .tree-call-word{font-size:.66rem;}
 body.tighter .tree-call-plus{font-size:.6rem;}
@@ -448,7 +448,7 @@ body.dark .btn-call,body.dark .btn-start,body.dark .btn-sheet.ok{filter:saturate
       <section class="view" id="view-standby">
         <img class="logo-top" src="snubh-logo.png" alt="Seoul National University Bundang Hospital">
         <h1 class="greet" id="greetTitle">Tonight's watch</h1>
-        <p class="greet-sub" id="greetSub">Weeknights 19:00 → 07:00 · Weekends 07:00 → 07:00. Backdated automatically.</p>
+        <p class="greet-sub" id="greetSub">Workdays 19:00 → 07:00 · Weekends &amp; KR holidays 07:00 → 07:00. Detected automatically.</p>
         <div class="wx" id="wxStandby"></div>
         <div id="sugBox"></div>
         <div class="line-sec">

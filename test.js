@@ -49,6 +49,18 @@ eq('suggest Tue03 → night from Mon19', [s[0].type, HH(s[0].start)], ['night', 
 s = L.suggest(D(2026, 7, 13, 11, 0));      // 월 11시 → 오늘 19시 예정(대기)
 eq('suggest Mon11 → tonight preStart', [s[0].type, HH(s[0].start), s[0].preStart], ['night', '2026-7-13 19:00', true]);
 
+// --- 공휴일: 평일 공휴일은 24h 당직으로 판별
+ok('holiday Mon 2026-10-05 is red', L.isRedDay(D(2026, 10, 5, 12, 0)));       // 개천절 대체(월)
+ok('workday Tue 2026-10-06 not red', !L.isRedDay(D(2026, 10, 6, 12, 0)));
+s = L.suggest(D(2026, 10, 5, 14, 0)); // 개천절 대체휴일(월) 오후 → 24h 당직 07시부터
+eq('suggest holiday Mon → 24h from 07', [s[0].type, HH(s[0].start), s[0].preStart], ['weekend', '2026-10-5 7:00', false]);
+s = L.suggest(D(2028, 10, 3, 22, 0)); // 2028 추석(화) 밤 → 24h 당직 진행 중
+eq('suggest Chuseok 2028 → 24h', [s[0].type, HH(s[0].start)], ['weekend', '2028-10-3 7:00']);
+s = L.suggest(D(2026, 12, 25, 3, 0)); // 성탄절(금) 새벽 → 목요일 밤당직 꼬리
+eq('suggest Xmas dawn → Thu night tail', [s[0].type, HH(s[0].start)], ['night', '2026-12-24 19:00']);
+s = L.suggest(D(2030, 2, 4, 15, 0));  // 2030 설연휴 월요일 → 24h
+eq('suggest Seollal 2030 Mon → 24h', [s[0].type, HH(s[0].start)], ['weekend', '2030-2-4 7:00']);
+
 // --- 과거 기록용 weekend 정의는 유지 (표시용)
 ok('weekend def kept for history', L.SHIFT_DEFS.weekend && L.SHIFT_DEFS.weekend.durH === 24);
 

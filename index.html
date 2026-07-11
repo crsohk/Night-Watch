@@ -297,7 +297,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
 .hx-empty{text-align:center;color:var(--ink-3);padding:36px 0;line-height:1.65;font-size:.88rem;}
 .btn-ghost-danger{margin:16px auto 4px;display:block;font-size:.78rem;font-weight:700;color:var(--danger);opacity:.85;padding:6px 12px;letter-spacing:.06em;}
 
-/* ---------- Bottom bar : refresh + tabs + wake + ticker ---------- */
+/* ---------- Bottom bar : refresh + tabs + dark ---------- */
 .bottom-row{flex:none;display:flex;align-items:center;justify-content:space-between;padding-top:8px;}
 .bottom-row .side{display:flex;gap:6px;width:86px;flex:none;align-items:center;}
 .icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid var(--line-soft);background:var(--card);
@@ -312,15 +312,37 @@ body.phase-active #btnLog{visibility:visible;}
   border-radius:100px;padding:4px;box-shadow:0 6px 18px -8px rgba(42,32,19,.2);}
 .tab{padding:11px 13px;border-radius:100px;font-size:.74rem;font-weight:900;color:var(--ink-3);letter-spacing:.1em;transition:color .2s,background .2s;}
 .tab.on{background:var(--amber-soft);color:var(--ink);}
-.ticker{flex:none;overflow:hidden;height:21px;margin-top:5px;
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
-  mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);}
-.tk{display:flex;gap:56px;width:max-content;animation:tick 60s linear infinite;}
-.tk span{white-space:nowrap;font-size:.72rem;color:var(--ink-3);line-height:21px;letter-spacing:.02em;}
-@keyframes tick{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+/* ---------- Shift-start intro : Muhwanja ---------- */
+.intro{position:fixed;inset:0;z-index:80;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;padding:32px;
+  background:linear-gradient(180deg,#F6F0E2 0%,var(--bg0) 55%,var(--bg1) 100%);
+  opacity:0;transition:opacity .45s ease;}
+.intro.on{display:flex;}
+.intro.show{opacity:1;}
+.intro-tree{width:min(84vw,380px);}
+.intro-tree svg{display:block;width:100%;height:auto;overflow:visible;}
+.intro-tree .stem{fill:none;stroke:#8E6D2D;stroke-width:3;stroke-linecap:round;
+  stroke-dasharray:1;stroke-dashoffset:1;}
+.intro.show .stem{animation:stemGrow .8s ease-out .15s forwards;}
+@keyframes stemGrow{to{stroke-dashoffset:0;}}
+.intro-tree .lf{transform:scale(0);}
+.intro-tree .lf-u{fill:#2FA04C;transform-box:fill-box;transform-origin:0% 100%;}
+.intro-tree .lf-d{fill:#27913F;transform-box:fill-box;transform-origin:0% 0%;}
+.intro.show .lf-u{animation:leafOpenU .55s cubic-bezier(.2,.9,.3,1.35) forwards;}
+.intro.show .lf-d{animation:leafOpenD .55s cubic-bezier(.2,.9,.3,1.35) forwards;}
+@keyframes leafOpenU{from{transform:rotate(-32deg) scale(.15);}to{transform:rotate(0deg) scale(1);}}
+@keyframes leafOpenD{from{transform:rotate(32deg) scale(.15);}to{transform:rotate(0deg) scale(1);}}
+.intro-name{font-family:var(--font-brand);font-weight:700;letter-spacing:.34em;text-indent:.34em;
+  font-size:1rem;color:var(--ink);opacity:0;transform:translateY(8px);}
+.intro-sub{font-size:.74rem;font-style:italic;color:var(--ink-3);letter-spacing:.08em;
+  opacity:0;transform:translateY(8px);margin-top:-8px;}
+.intro.show .intro-name{animation:introText .7s ease 2.6s forwards;}
+.intro.show .intro-sub{animation:introText .7s ease 2.85s forwards;}
+@keyframes introText{to{opacity:1;transform:none;}}
+body.dark .intro{background:linear-gradient(180deg,#1A1309 0%,var(--bg0) 55%,var(--bg1) 100%);}
 
 /* ---------- Version stamp (bottom-right) ---------- */
-.ver{position:absolute;right:16px;bottom:calc(var(--safe-b) + 3px);z-index:2;
+.ver{flex:none;text-align:right;margin-top:5px;
   font-size:.58rem;font-style:italic;color:var(--ink-3);letter-spacing:.04em;pointer-events:none;}
 
 /* ---------- Sheets & dialog ---------- */
@@ -391,8 +413,6 @@ body.tight .msg{margin-top:7px;min-height:46px;}
 body.tight .line-sec{margin-top:7px;}
 body.tight .wx{margin-top:8px;}
 body.tight .sug{margin-top:10px;padding:13px;}
-body.tight .ticker{margin-top:3px;}
-body.tighter .ticker{display:none;}
 body.tighter .msg{display:none;}
 body.tighter .meta-c{display:none;}
 body.tighter .bat-track{height:80px;}
@@ -447,7 +467,6 @@ body.dark .btn-call,body.dark .btn-start,body.dark .btn-sheet.ok{filter:saturate
 
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms !important;transition-duration:.01ms !important;}
-  .tk{animation:none;}
 }
 </style>
 </head>
@@ -576,9 +595,8 @@ body.dark .btn-call,body.dark .btn-start,body.dark .btn-sheet.ok{filter:saturate
       </button>
       </div>
     </div>
-    <div class="ticker" id="ticker"><div class="tk" id="tk"><span id="tkA">Loading good news…</span><span id="tkB">Loading good news…</span></div></div>
+    <div class="ver">v3.3.3 · build 260712 · Eriksen Oh</div>
     <img class="logo-bot" src="snubh-logo.png" alt="Seoul National University Bundang Hospital">
-    <div class="ver">v3.2.1 · build 260712 · Eriksen Oh</div>
   </div>
 
   <!-- Edit sheet -->
@@ -632,6 +650,40 @@ body.dark .btn-call,body.dark .btn-start,body.dark .btn-sheet.ok{filter:saturate
       <button class="dlg-no" id="dlgNo" type="button">CANCEL</button>
       <button class="dlg-ok" id="dlgOk" type="button">OK</button>
     </div>
+  </div>
+
+  <!-- Shift-start intro -->
+  <div class="intro" id="intro" aria-hidden="true">
+    <div class="intro-tree">
+      <svg viewBox="0 0 380 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path class="stem" d="M28 118 C 110 106, 220 96, 320 92" pathLength="1"/>
+        <g transform="translate(72.0 112.1) rotate(-7.1) scale(0.75)">
+          <path class="lf lf-u" style="animation-delay:0.6s" d="M0 0 C8 -20, 26 -30, 40 -26 C32 -10, 16 -2, 0 0 Z"/>
+          <path class="lf lf-d" style="animation-delay:0.6s" d="M0 0 C8 20, 26 30, 40 26 C32 10, 16 2, 0 0 Z"/>
+        </g>
+        <g transform="translate(122.0 106.4) rotate(-6.0) scale(0.9)">
+          <path class="lf lf-u" style="animation-delay:0.95s" d="M0 0 C8 -20, 26 -30, 40 -26 C32 -10, 16 -2, 0 0 Z"/>
+          <path class="lf lf-d" style="animation-delay:0.95s" d="M0 0 C8 20, 26 30, 40 26 C32 10, 16 2, 0 0 Z"/>
+        </g>
+        <g transform="translate(172.0 101.6) rotate(-5.0)">
+          <path class="lf lf-u" style="animation-delay:1.3s" d="M0 0 C8 -20, 26 -30, 40 -26 C32 -10, 16 -2, 0 0 Z"/>
+          <path class="lf lf-d" style="animation-delay:1.3s" d="M0 0 C8 20, 26 30, 40 26 C32 10, 16 2, 0 0 Z"/>
+        </g>
+        <g transform="translate(222.0 97.6) rotate(-4.1) scale(0.95)">
+          <path class="lf lf-u" style="animation-delay:1.65s" d="M0 0 C8 -20, 26 -30, 40 -26 C32 -10, 16 -2, 0 0 Z"/>
+          <path class="lf lf-d" style="animation-delay:1.65s" d="M0 0 C8 20, 26 30, 40 26 C32 10, 16 2, 0 0 Z"/>
+        </g>
+        <g transform="translate(268.0 94.6) rotate(-3.3) scale(0.85)">
+          <path class="lf lf-u" style="animation-delay:2s" d="M0 0 C8 -20, 26 -30, 40 -26 C32 -10, 16 -2, 0 0 Z"/>
+          <path class="lf lf-d" style="animation-delay:2s" d="M0 0 C8 20, 26 30, 40 26 C32 10, 16 2, 0 0 Z"/>
+        </g>
+        <g transform="translate(320.0 92.0) rotate(13.7)">
+          <path class="lf lf-u" style="animation-delay:2.35s" d="M0 0 C8 -20, 26 -30, 40 -26 C32 -10, 16 -2, 0 0 Z"/>
+        </g>
+      </svg>
+    </div>
+    <div class="intro-name">MUHWANJA</div>
+    <div class="intro-sub">the tree of no misfortune · may tonight bring none</div>
   </div>
 
   <div class="toast" id="toast"></div>

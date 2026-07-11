@@ -1,4 +1,4 @@
-/* Night Watch v3.2.1 (build 260712) - English UI, beige one-screen layout, 1.5x battery.
+/* Night Watch v3.3.3 (build 260712) - English UI, beige one-screen layout, 1.5x battery.
    Pure logic functions are exported at the bottom for node tests. */
 'use strict';
 
@@ -57,7 +57,7 @@ var FIXED_ROLES = [ // fixed lines; numbers never shown on the main screen
   { k: 'or',   label: 'OR',   def: '031-787-3355' },
   { k: 'eicu', label: 'EICU', def: '031-787-3700' }
 ];
-var LS_STATE = 'nw:v1', LS_SET = 'nw:set:v1', LS_WX = 'nw:wx:v1', LS_NEWS = 'nw:news:v1';
+var LS_STATE = 'nw:v1', LS_SET = 'nw:set:v1', LS_WX = 'nw:wx:v1';
 var DAY = 86400000, HOUR = 3600000;
 
 /* ================= Pure logic ================= */
@@ -304,7 +304,6 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   })();
 
   var wxCache = load(LS_WX);
-  var newsCache = load(LS_NEWS);
   var activeTab = 'watch';
   var lastMsgKey = '';
 
@@ -335,7 +334,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     logSheet: $('logSheet'), logList: $('logList'), logCount: $('logCount'),
     btnEndShift: $('btnEndShift'), logClose: $('logClose'),
     dlg: $('dlg'), dlgText: $('dlgText'), dlgSub: $('dlgSub'), dlgOk: $('dlgOk'), dlgNo: $('dlgNo'),
-    toast: $('toast'), btnRefresh: $('btnRefresh'), tkA: $('tkA'), tkB: $('tkB')
+    toast: $('toast'), btnRefresh: $('btnRefresh')
   };
 
   /* ---------- Views ---------- */
@@ -404,6 +403,17 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       : fmtHMS(now - s.start) + ' will be recorded as already elapsed.';
     confirmDlg('Start ' + SHIFT_DEFS[s.type].label + ' from ' + relDay(s.start, now) + ' ' + fmtClock(s.start) + '?', sub, false, startShift);
   }
+  /* Muhwanja intro: a short breath between START and the watch */
+  var introEl = $('intro');
+  function playIntro(done) {
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!introEl || reduce) { done(); return; }
+    introEl.classList.add('on');
+    requestAnimationFrame(function () { introEl.classList.add('show'); });
+    setTimeout(done, 3400);                                            // render the watch beneath
+    setTimeout(function () { introEl.classList.remove('show'); }, 3800); // fade out
+    setTimeout(function () { introEl.classList.remove('on'); }, 4300);
+  }
   function startShift() {
     var now = new Date();
     var s = suggest(now)[0];
@@ -414,8 +424,10 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     };
     save();
     lastMsgKey = '';
-    renderAll();
-    toast(SHIFT_DEFS[s.type].label + ' started · from ' + fmtClock(s.start));
+    playIntro(function () {
+      renderAll();
+      toast(SHIFT_DEFS[s.type].label + ' started · from ' + fmtClock(s.start));
+    });
   }
 
   /* ---------- Active ---------- */
@@ -901,50 +913,16 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
         save();
         lastMsgKey = '';
         fetchWeather(true);
-        fetchNews(true);
         renderAll();
         toast('Reset. Ready to start again.');
       });
     } else {
       lastMsgKey = '';
       fetchWeather(true);
-      fetchNews(true);
       renderAll();
       toast('Refreshed');
     }
   });
-
-  /* ---------- Good-news ticker ---------- */
-  var NEWS_FALLBACK = [
-    'Somewhere tonight, a patient you once operated on is sleeping soundly.',
-    'Global surgical outcomes keep improving year after year.',
-    'Every quiet minute on call is a small victory.',
-    'Coffee supplies in the call room remain stable.',
-    'Sunrise is on schedule, as always.',
-    'Your team is one call away. You are not alone tonight.'
-  ];
-  function renderTicker() {
-    var titles = (newsCache && newsCache.titles && newsCache.titles.length)
-      ? newsCache.titles : NEWS_FALLBACK;
-    var text = 'GOOD NEWS +++ ' + titles.join('  +++  ') + '  +++  ';
-    els.tkA.textContent = text;
-    els.tkB.textContent = text;
-  }
-  function fetchNews(force) {
-    if (!navigator.onLine) { renderTicker(); return; }
-    if (!force && newsCache && Date.now() - newsCache.ts < 60 * 60000) { renderTicker(); return; }
-    fetch('https://www.reddit.com/r/UpliftingNews/top.json?t=day&limit=12')
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        var titles = (d.data.children || []).map(function (c) { return c.data.title; })
-          .filter(function (t) { return t && t.length < 140; }).slice(0, 10);
-        if (!titles.length) throw new Error('empty');
-        newsCache = { ts: Date.now(), titles: titles };
-        localStorage.setItem(LS_NEWS, JSON.stringify(newsCache));
-        renderTicker();
-      })
-      .catch(function () { renderTicker(); });
-  }
 
   /* ---------- Dark mode toggle ---------- */
   var SUN_ICON = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
@@ -1009,8 +987,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     }
   }, 1000);
   setInterval(function () { fetchWeather(false); }, 30 * 60000);
-  setInterval(function () { fetchNews(false); }, 60 * 60000);
-  window.addEventListener('online', function () { fetchWeather(true); fetchNews(true); });
+  window.addEventListener('online', function () { fetchWeather(true); });
 
   /* ---------- Boot ---------- */
   applyDark();
@@ -1018,8 +995,6 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   lastPhase = state.current ? phase(new Date()) : 'standby';
   renderAll();
   fetchWeather(false);
-  renderTicker();
-  fetchNews(false);
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {

@@ -394,10 +394,18 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       '<div class="win">' + fmtWin(s, now) + '</div></div></div>' +
       '<div class="note">' + note + '</div>' +
       '<button class="btn-start" id="btnStart" type="button">START SHIFT</button></div>';
-    $('btnStart').addEventListener('click', startShift);
+    $('btnStart').addEventListener('click', confirmStart);
     renderLine(els.lineGrid1);
   }
 
+  function confirmStart() {
+    var now = new Date();
+    var s = suggest(now)[0];
+    var sub = s.preStart
+      ? 'Tracking begins at ' + fmtClock(s.start) + ' sharp.'
+      : fmtHMS(now - s.start) + ' will be recorded as already elapsed.';
+    confirmDlg('Start ' + SHIFT_DEFS[s.type].label + ' from ' + relDay(s.start, now) + ' ' + fmtClock(s.start) + '?', sub, false, startShift);
+  }
   function startShift() {
     var now = new Date();
     var s = suggest(now)[0];
@@ -459,7 +467,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       var ready = nm || cleanNum(settings.teamTels[r.k]);
       html += '<button class="mate' + (ready ? '' : ' no-num') + '" data-name-role="' + r.k + '" type="button">' +
         '<span class="role">' + r.label + '</span>' +
-        '<span class="nm' + (nm ? '' : ' empty') + '">' + (nm ? esc(nm) : 'Name') + '</span></button>';
+        '<span class="nm' + (nm ? '' : ' empty') + '">' + (nm ? esc(nm) : '+ SET') + '</span></button>';
     });
     grid.innerHTML = html;
     grid.querySelectorAll('[data-name-role]').forEach(function (b) {
@@ -551,7 +559,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   });
   els.btnLog.addEventListener('click', function () {
     renderCalls();
-    els.scrim.classList.add('on'); els.logSheet.classList.add('on');
+    overlayOpen(els.logSheet);
   });
   els.logClose.addEventListener('click', closeSheets);
   els.btnEndShift.addEventListener('click', function () {
@@ -596,6 +604,15 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     return k;
   }
   function renderHistory() {
+    var cur = state.current;
+    var curEl = $('hxCurrent');
+    if (cur) {
+      curEl.style.display = '';
+      curEl.innerHTML = '<div class="hx-line"><div>' +
+        '<div class="hx-date">' + fmtDateE(new Date(cur.start)) + '</div>' +
+        '<div class="hx-type" style="color:var(--green-deep)">IN PROGRESS · SAVED WHEN FINISHED</div></div>' +
+        '<div class="hx-calls"><span class="c">' + cur.calls.length + '</span><span class="u">CALLS</span></div></div>';
+    } else curEl.style.display = 'none';
     var hx = state.history;
     var totalCalls = hx.reduce(function (s, h) { return s + h.calls.length; }, 0);
     els.hxShifts.textContent = hx.length;
@@ -790,7 +807,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     els.fixedForm.innerHTML = ff;
     els.scName.value = settings.shortcutName || 'DutyCall';
     els.scPick.value = settings.pickShortcut || 'PickContact';
-    els.scrim.classList.add('on'); els.sheet.classList.add('on');
+    overlayOpen(els.sheet);
   }
   els.pasteBar.addEventListener('click', function () {
     var k = pendingPick;
@@ -805,10 +822,26 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       if (!p.name && !p.tel) toast('Clipboard had no contact. Run PickContact first.');
     }).catch(function () { toast('Allow paste to fill from Contacts'); });
   });
+  var lastFocus = null;
+  function overlayOpen(el) {
+    lastFocus = document.activeElement;
+    el.inert = false;
+    el.removeAttribute('aria-hidden');
+    el.classList.add('on');
+    els.scrim.classList.add('on');
+    var f = el.querySelector('input,button');
+    if (f) setTimeout(function () { f.focus(); }, 350);
+  }
+  function overlayClose(el) {
+    el.classList.remove('on');
+    el.inert = true;
+    el.setAttribute('aria-hidden', 'true');
+  }
   function closeSheets() {
     els.scrim.classList.remove('on');
-    els.sheet.classList.remove('on');
-    els.logSheet.classList.remove('on');
+    overlayClose(els.sheet);
+    overlayClose(els.logSheet);
+    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
   }
   els.sheetSave.addEventListener('click', function () {
     NAME_ROLES.forEach(function (r) {
@@ -838,15 +871,23 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     els.dlgSub.textContent = sub || '';
     els.dlgOk.classList.toggle('warn', !!warn);
     dlgCb = cb;
+    lastFocus = document.activeElement;
+    els.dlg.inert = false;
+    els.dlg.removeAttribute('aria-hidden');
     els.dlg.classList.add('on'); els.scrim.classList.add('on');
+    setTimeout(function () { els.dlgNo.focus(); }, 250);
+  }
+  function dlgClose() {
+    els.dlg.classList.remove('on'); els.scrim.classList.remove('on');
+    els.dlg.inert = true;
+    els.dlg.setAttribute('aria-hidden', 'true');
+    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
   }
   els.dlgOk.addEventListener('click', function () {
-    els.dlg.classList.remove('on'); els.scrim.classList.remove('on');
+    dlgClose();
     if (dlgCb) { var f = dlgCb; dlgCb = null; f(); }
   });
-  els.dlgNo.addEventListener('click', function () {
-    els.dlg.classList.remove('on'); els.scrim.classList.remove('on'); dlgCb = null;
-  });
+  els.dlgNo.addEventListener('click', function () { dlgClose(); dlgCb = null; });
   var toastTimer = null;
   function toast(msg) {
     els.toast.textContent = msg;

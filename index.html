@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Night Watch</title>
 <meta name="description" content="An offline shift tracker: elapsed time, remaining time, and call counts for the night watch.">
 <meta name="theme-color" content="#F0E9DA">
@@ -99,7 +99,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
 .micro{font-size:.68rem;font-weight:700;letter-spacing:.2em;color:var(--amber);text-transform:uppercase;}
 .sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px;flex:none;}
 .sec-head .k{font-size:.8rem;font-weight:900;color:var(--ink-2);letter-spacing:.16em;}
-.sec-head .acts button{font-size:.78rem;font-weight:900;color:var(--amber);padding:2px 0;letter-spacing:.1em;}
+.sec-head .acts button{font-size:.78rem;font-weight:900;color:var(--amber);letter-spacing:.1em;padding:14px 12px;margin:-14px -12px;}
 
 /* ---------- Battery (compact, times inside) ---------- */
 .bat-block{flex:none;margin-top:9px;}
@@ -133,8 +133,8 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
 .bat-pct sup{font-size:.44em;font-weight:700;color:var(--amber);vertical-align:.55em;margin-left:2px;}
 .bat-in{position:absolute;left:14px;right:14px;bottom:7px;z-index:2;
   display:flex;justify-content:space-between;align-items:flex-end;}
-.bt{font-size:.6rem;color:var(--ink-2);font-weight:900;letter-spacing:.1em;
-  text-shadow:0 1px 0 rgba(255,255,255,.5);}
+.bt{font-size:.6rem;color:var(--ink);font-weight:900;letter-spacing:.1em;
+  text-shadow:0 1px 2px rgba(255,255,255,.65);}
 .bt b{display:block;margin-top:1px;font-size:1rem;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:.02em;}
 .bt.right{text-align:right;}
 .bat-cap{flex:none;width:10px;height:28%;min-height:32px;max-height:44px;border-radius:0 8px 8px 0;
@@ -289,8 +289,8 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
 
 /* ---------- Bottom bar : refresh + tabs + wake + ticker ---------- */
 .bottom-row{flex:none;display:flex;align-items:center;justify-content:space-between;padding-top:8px;}
-.bottom-row .side{display:flex;gap:6px;width:82px;flex:none;}
-.icon-btn{width:38px;height:38px;border-radius:12px;border:1px solid var(--line-soft);background:var(--card);
+.bottom-row .side{display:flex;gap:6px;width:94px;flex:none;}
+.icon-btn{width:44px;height:44px;border-radius:13px;border:1px solid var(--line-soft);background:var(--card);
   display:flex;align-items:center;justify-content:center;color:var(--ink-3);transition:all .2s;flex:none;}
 .icon-btn.on{color:var(--green-deep);border-color:rgba(47,190,84,.45);background:rgba(47,190,84,.10);}
 .icon-btn:active{transform:scale(.93);}
@@ -298,7 +298,7 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
 .tabbar{display:flex;justify-content:center;}
 .tabbar .inner{display:flex;gap:5px;background:var(--card);border:1px solid var(--line);
   border-radius:100px;padding:4px;box-shadow:0 6px 18px -8px rgba(42,32,19,.2);}
-.tab{padding:7px 20px;border-radius:100px;font-size:.8rem;font-weight:900;color:var(--ink-3);letter-spacing:.14em;transition:color .2s,background .2s;}
+.tab{padding:11px 20px;border-radius:100px;font-size:.8rem;font-weight:900;color:var(--ink-3);letter-spacing:.14em;transition:color .2s,background .2s;}
 .tab.on{background:var(--amber-soft);color:var(--ink);}
 .ticker{flex:none;overflow:hidden;height:21px;margin-top:5px;
   -webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);
@@ -526,8 +526,9 @@ body.dark .btn-call,body.dark .btn-start,body.dark .btn-sheet.ok{filter:saturate
       <!-- ===== HISTORY ===== -->
       <section class="view" id="view-history">
         <h1 class="greet" style="font-size:1.2rem;letter-spacing:.08em">HISTORY</h1>
+        <div class="hx-item" id="hxCurrent" style="display:none;margin-top:8px;border-color:rgba(47,190,84,.4)"></div>
         <div class="hx-stats">
-          <div class="stat"><div class="lb">SHIFTS</div><div class="v" id="hxShifts">0</div></div>
+          <div class="stat"><div class="lb">DONE</div><div class="v" id="hxShifts">0</div></div>
           <div class="stat gr"><div class="lb">CALLS</div><div class="v" id="hxCalls">0</div></div>
           <div class="stat"><div class="lb">AVG</div><div class="v" id="hxAvg">0</div></div>
         </div>
@@ -565,7 +566,7 @@ body.dark .btn-call,body.dark .btn-start,body.dark .btn-sheet.ok{filter:saturate
 
   <!-- Edit sheet -->
   <div class="scrim" id="scrim"></div>
-  <div class="sheet" id="sheet">
+  <div class="sheet" id="sheet" inert aria-hidden="true">
     <h3>CALL LINE SETUP</h3>
     <p class="hint"><b>GW1 · GW2 · ICU · PA · CR · UGI · HBP · VAS</b> - tap the <b>contact button</b> on the left of a row to pull name and number from your address book. With a number saved, tapping the card dials instantly. <b>ER · ANE · OR · EICU</b> are fixed lines. Numbers never appear on the main screen.</p>
     <button class="btn-paste" id="pasteBar" type="button">PASTE FROM CONTACTS</button>
@@ -597,7 +598,7 @@ body.dark .btn-call,body.dark .btn-start,body.dark .btn-sheet.ok{filter:saturate
   </div>
 
   <!-- Call log sheet -->
-  <div class="sheet" id="logSheet">
+  <div class="sheet" id="logSheet" inert aria-hidden="true">
     <h3>CALL LOG <span class="micro" id="logCount">0 CALLS</span></h3>
     <div class="tl-scroll" id="logList"><div class="tl-empty">No calls yet. May it stay quiet.</div></div>
     <button class="btn-end-shift" id="btnEndShift" type="button">END SHIFT EARLY…</button>
@@ -607,7 +608,7 @@ body.dark .btn-call,body.dark .btn-start,body.dark .btn-sheet.ok{filter:saturate
   </div>
 
   <!-- Confirm dialog -->
-  <div class="dlg" id="dlg">
+  <div class="dlg" id="dlg" inert aria-hidden="true">
     <p id="dlgText">Confirm</p>
     <p class="sub" id="dlgSub"></p>
     <div class="dlg-btns">

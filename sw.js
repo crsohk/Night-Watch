@@ -1,6 +1,6 @@
 /* Night Watch — offline-first service worker */
 'use strict';
-const VERSION = 'nightwatch-v2.8.1';
+const VERSION = 'nightwatch-v2.9.0';
 const ASSETS = [
   './',
   './index.html',

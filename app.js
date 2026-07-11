@@ -1,4 +1,4 @@
-/* Night Watch v2.1 - English UI, beige one-screen layout, 1.5x battery.
+/* Night Watch v3.2.1 (build 260712) - English UI, beige one-screen layout, 1.5x battery.
    Pure logic functions are exported at the bottom for node tests. */
 'use strict';
 
@@ -53,7 +53,7 @@ var NAME_ROLES = [ // dial by saved number, or by name via Shortcuts
 ];
 var FIXED_ROLES = [ // fixed lines; numbers never shown on the main screen
   { k: 'er',   label: 'ER',   def: '031-787-3001' },
-  { k: 'anes', label: 'ANE',  def: '010-3079-8352' },
+  { k: 'anes', label: 'ANE',  def: '' }, // personal number: never in source - set it in-app via EDIT
   { k: 'or',   label: 'OR',   def: '031-787-3355' },
   { k: 'eicu', label: 'EICU', def: '031-787-3700' }
 ];
@@ -285,7 +285,6 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   });
   delete settings.phones; delete settings.quickDial;
   settings.shortcutName = settings.shortcutName || 'DutyCall';
-  if (settings.ambient === undefined) settings.ambient = true; // 잔잔한 소리 기본 켜짐
   settings.pickShortcut = settings.pickShortcut || 'PickContact';
   saveSet();
 
@@ -318,13 +317,13 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   var els = {
     date: $('hdrDate'), clock: $('hdrClock'), btnDark: $('btnDark'),
     vStandby: $('view-standby'), vActive: $('view-active'), vDone: $('view-done'), vHistory: $('view-history'),
-    greetTitle: $('greetTitle'), greetSub: $('greetSub'), sugBox: $('sugBox'), wxStandby: $('wxStandby'),
+    greetTitle: $('greetTitle'), sugBox: $('sugBox'), wxStandby: $('wxStandby'),
     leafMarkers: $('leafMarkers'),
     wxNowLb: $('wxNowLb'), wxNowV: $('wxNowV'), wxEndLb: $('wxEndLb'), wxEndV: $('wxEndV'),
     batFill: $('batFill'), pctNum: $('pctNum'), tElapsed: $('tElapsed'), tRemain: $('tRemain'),
     msgCard: $('msgCard'), msgText: $('msgText'), msgWho: $('msgWho'),
     lineGrid1: $('lineGrid1'), lineGrid2: $('lineGrid2'),
-    btnCall: $('btnCall'), btnUndo: $('btnUndo'), btnLog: $('btnLog'), callCnt: $('callCnt'),
+    btnCall: $('btnCall'), btnUndo: $('btnUndo'), btnLog: $('btnLog'),
     doneDur: $('doneDur'), doneCalls: $('doneCalls'), doneBusy: $('doneBusy'), doneQuote: $('doneQuote'),
     btnArchive: $('btnArchive'),
     hxShifts: $('hxShifts'), hxCalls: $('hxCalls'), hxAvg: $('hxAvg'),
@@ -336,7 +335,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     logSheet: $('logSheet'), logList: $('logList'), logCount: $('logCount'),
     btnEndShift: $('btnEndShift'), logClose: $('logClose'),
     dlg: $('dlg'), dlgText: $('dlgText'), dlgSub: $('dlgSub'), dlgOk: $('dlgOk'), dlgNo: $('dlgNo'),
-    toast: $('toast'), btnRefresh: $('btnRefresh'), btnMusic: $('btnMusic'), tkA: $('tkA'), tkB: $('tkB')
+    toast: $('toast'), btnRefresh: $('btnRefresh'), tkA: $('tkA'), tkB: $('tkB')
   };
 
   /* ---------- Views ---------- */
@@ -380,7 +379,6 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   }
   function renderStandby(now) {
     els.greetTitle.textContent = greet(now);
-    els.greetSub.textContent = 'Workdays 19:00 → 07:00 · Weekends & KR holidays 07:00 → 07:00. Detected automatically.';
     var s = suggest(now)[0];
     var moonIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A9762F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
     var sunIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A9762F" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
@@ -526,7 +524,6 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
 
   function renderCalls() {
     var calls = state.current ? state.current.calls : [];
-    els.callCnt.textContent = String(calls.length);
     renderLeafCalls();
     els.btnUndo.disabled = !calls.length;
     els.logCount.textContent = calls.length + ' CALLS';
@@ -949,128 +946,6 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       .catch(function () { renderTicker(); });
   }
 
-  /* ---------- Lagrima (after F. Tarrega) - Karplus-Strong guitar, offline ---------- */
-  var audioCtx = null, ambientOn = false, guitarMaster = null;
-  var loopTimer = null, liveSources = [];
-  var pluckCache = {};
-  var TEMPO = 63, SPB = 60 / TEMPO; // seconds per beat, 3/4 andante
-
-  function midiHz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  function pluckBuffer(midi) {
-    if (pluckCache[midi]) return pluckCache[midi];
-    var sr = audioCtx.sampleRate, dur = 3.2;
-    var freq = midiHz(midi);
-    var N = Math.max(2, Math.round(sr / freq));
-    var buf = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
-    var d = buf.getChannelData(0);
-    var ring = new Float32Array(N), last = 0;
-    for (var i = 0; i < N; i++) { // lowpassed noise burst → nylon warmth
-      var r = Math.random() * 2 - 1;
-      ring[i] = (r + last) * 0.5; last = r;
-    }
-    var idx = 0;
-    for (var n = 0; n < d.length; n++) {
-      var cur = ring[idx], nxt = ring[(idx + 1) % N];
-      d[n] = cur;
-      ring[idx] = 0.997 * 0.5 * (cur + nxt);
-      idx = (idx + 1) % N;
-    }
-    pluckCache[midi] = buf;
-    return buf;
-  }
-  /* Score: melody/bass/inner voices, [beat, midi, gain] */
-  function lagrimaScore() {
-    var ev = [];
-    // bar chords: [bass, fill1, fill2]
-    var CH = { E: [40, 59, 64], A: [45, 61, 64], Am: [45, 60, 64], B7: [47, 63, 66], Em: [40, 55, 64] };
-    // A section (E major) then B section (E minor); mel: [beatInBar, midi, beats]
-    var A = [
-      ['E',  [[0, 76, 2], [2, 75, 1]]],
-      ['A',  [[0, 73, 2], [2, 71, 1]]],
-      ['A',  [[0, 69, 2], [2, 68, 1]]],
-      ['B7', [[0, 66, 3]]],
-      ['E',  [[0, 76, 2], [2, 75, 1]]],
-      ['A',  [[0, 73, 2], [2, 71, 1]]],
-      ['B7', [[0, 69, 1], [1, 68, 1], [2, 66, 1]]],
-      ['E',  [[0, 64, 3]]]
-    ];
-    var B = [
-      ['Em', [[0, 71, 1], [1, 76, 1], [2, 79, 1]]],
-      ['B7', [[0, 78, 2], [2, 76, 1]]],
-      ['B7', [[0, 75, 1], [1, 76, 1], [2, 78, 1]]],
-      ['Em', [[0, 76, 3]]],
-      ['Em', [[0, 71, 1], [1, 76, 1], [2, 79, 1]]],
-      ['Am', [[0, 81, 2], [2, 79, 1]]],
-      ['B7', [[0, 78, 1], [1, 76, 1], [2, 75, 1]]],
-      ['E',  [[0, 76, 3]]]
-    ];
-    var form = A.concat(A, B, B, A); // A A B B A
-    var beat = 0;
-    form.forEach(function (bar) {
-      var ch = CH[bar[0]];
-      ev.push([beat, ch[0], 0.5]);          // bass on 1
-      ev.push([beat + 1, ch[1], 0.22]);     // inner voice
-      ev.push([beat + 2, ch[2], 0.2]);
-      bar[1].forEach(function (m) { ev.push([beat + m[0], m[1], 0.85]); });
-      beat += 3;
-    });
-    // final low E chord arpeggio
-    [40, 47, 52, 56, 59, 64].forEach(function (m, i) {
-      ev.push([beat + i * 0.12, m, 0.4]);
-    });
-    return { events: ev, beats: beat + 4 };
-  }
-  function scheduleLagrima() {
-    var score = lagrimaScore();
-    var t0 = audioCtx.currentTime + 0.25;
-    score.events.forEach(function (e) {
-      var src = audioCtx.createBufferSource();
-      src.buffer = pluckBuffer(e[1]);
-      var g = audioCtx.createGain();
-      g.gain.value = e[2];
-      src.connect(g); g.connect(guitarMaster);
-      src.start(t0 + e[0] * SPB);
-      liveSources.push(src);
-    });
-    if (liveSources.length > 400) liveSources.splice(0, liveSources.length - 200);
-    var totalMs = (score.beats * SPB + 3) * 1000; // 3s of rest, then again
-    loopTimer = setTimeout(function () {
-      if (ambientOn) scheduleLagrima();
-    }, totalMs);
-  }
-  function actuallyStart() {
-    if (ambientOn) return;
-    if (audioCtx.state !== 'running') return; // 제스처 전이면 대기 (다음 터치가 재시도)
-    guitarMaster = audioCtx.createGain();
-    guitarMaster.gain.value = 0;
-    var comp = audioCtx.createDynamicsCompressor();
-    guitarMaster.connect(comp); comp.connect(audioCtx.destination);
-    guitarMaster.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 1.5);
-    ambientOn = true;
-    scheduleLagrima();
-    els.btnMusic.classList.add('on');
-    toast('\u266A L\u00E1grima \u00B7 after T\u00E1rrega');
-  }
-  function startAmbient() {
-    try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      var p = audioCtx.resume();
-      if (p && p.then) p.then(actuallyStart).catch(function () {});
-      actuallyStart();
-    } catch (e) { toast('Audio unavailable'); }
-  }
-  function stopAmbient() {
-    ambientOn = false;
-    clearTimeout(loopTimer);
-    if (guitarMaster && audioCtx) {
-      guitarMaster.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.8);
-      var srcs = liveSources; liveSources = [];
-      setTimeout(function () {
-        srcs.forEach(function (s) { try { s.stop(); } catch (e) {} });
-      }, 1000);
-    }
-    els.btnMusic.classList.remove('on');
-  }
   /* ---------- Dark mode toggle ---------- */
   var SUN_ICON = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
   var MOON_ICON = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
@@ -1115,6 +990,12 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   }
   window.addEventListener('resize', function () { requestAnimationFrame(fitCheck); });
   window.addEventListener('orientationchange', function () { setTimeout(fitCheck, 250); });
+  // Re-measure once fonts/assets settle - network timing must never change the layout
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { requestAnimationFrame(fitCheck); });
+  }
+  window.addEventListener('load', function () { requestAnimationFrame(fitCheck); });
+  setTimeout(function () { fitCheck(); }, 1200);
 
   /* ---------- Tick ---------- */
   var lastPhase = null;

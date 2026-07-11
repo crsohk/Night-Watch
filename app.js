@@ -949,79 +949,121 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       .catch(function () { renderTicker(); });
   }
 
-  /* ---------- Calm ambient sound (generative, offline) ---------- */
-  var audioCtx = null, ambientOn = false, ambientNodes = null, noteTimer = null;
-  var SCALE = [220, 261.63, 293.66, 329.63, 392, 440, 523.25]; // A minor pentatonic-ish
+  /* ---------- Lagrima (after F. Tarrega) - Karplus-Strong guitar, offline ---------- */
+  var audioCtx = null, ambientOn = false, guitarMaster = null;
+  var loopTimer = null, liveSources = [];
+  var pluckCache = {};
+  var TEMPO = 63, SPB = 60 / TEMPO; // seconds per beat, 3/4 andante
+
+  function midiHz(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  function pluckBuffer(midi) {
+    if (pluckCache[midi]) return pluckCache[midi];
+    var sr = audioCtx.sampleRate, dur = 3.2;
+    var freq = midiHz(midi);
+    var N = Math.max(2, Math.round(sr / freq));
+    var buf = audioCtx.createBuffer(1, Math.floor(sr * dur), sr);
+    var d = buf.getChannelData(0);
+    var ring = new Float32Array(N), last = 0;
+    for (var i = 0; i < N; i++) { // lowpassed noise burst → nylon warmth
+      var r = Math.random() * 2 - 1;
+      ring[i] = (r + last) * 0.5; last = r;
+    }
+    var idx = 0;
+    for (var n = 0; n < d.length; n++) {
+      var cur = ring[idx], nxt = ring[(idx + 1) % N];
+      d[n] = cur;
+      ring[idx] = 0.997 * 0.5 * (cur + nxt);
+      idx = (idx + 1) % N;
+    }
+    pluckCache[midi] = buf;
+    return buf;
+  }
+  /* Score: melody/bass/inner voices, [beat, midi, gain] */
+  function lagrimaScore() {
+    var ev = [];
+    // bar chords: [bass, fill1, fill2]
+    var CH = { E: [40, 59, 64], A: [45, 61, 64], Am: [45, 60, 64], B7: [47, 63, 66], Em: [40, 55, 64] };
+    // A section (E major) then B section (E minor); mel: [beatInBar, midi, beats]
+    var A = [
+      ['E',  [[0, 76, 2], [2, 75, 1]]],
+      ['A',  [[0, 73, 2], [2, 71, 1]]],
+      ['A',  [[0, 69, 2], [2, 68, 1]]],
+      ['B7', [[0, 66, 3]]],
+      ['E',  [[0, 76, 2], [2, 75, 1]]],
+      ['A',  [[0, 73, 2], [2, 71, 1]]],
+      ['B7', [[0, 69, 1], [1, 68, 1], [2, 66, 1]]],
+      ['E',  [[0, 64, 3]]]
+    ];
+    var B = [
+      ['Em', [[0, 71, 1], [1, 76, 1], [2, 79, 1]]],
+      ['B7', [[0, 78, 2], [2, 76, 1]]],
+      ['B7', [[0, 75, 1], [1, 76, 1], [2, 78, 1]]],
+      ['Em', [[0, 76, 3]]],
+      ['Em', [[0, 71, 1], [1, 76, 1], [2, 79, 1]]],
+      ['Am', [[0, 81, 2], [2, 79, 1]]],
+      ['B7', [[0, 78, 1], [1, 76, 1], [2, 75, 1]]],
+      ['E',  [[0, 76, 3]]]
+    ];
+    var form = A.concat(A, B, B, A); // A A B B A
+    var beat = 0;
+    form.forEach(function (bar) {
+      var ch = CH[bar[0]];
+      ev.push([beat, ch[0], 0.5]);          // bass on 1
+      ev.push([beat + 1, ch[1], 0.22]);     // inner voice
+      ev.push([beat + 2, ch[2], 0.2]);
+      bar[1].forEach(function (m) { ev.push([beat + m[0], m[1], 0.85]); });
+      beat += 3;
+    });
+    // final low E chord arpeggio
+    [40, 47, 52, 56, 59, 64].forEach(function (m, i) {
+      ev.push([beat + i * 0.12, m, 0.4]);
+    });
+    return { events: ev, beats: beat + 4 };
+  }
+  function scheduleLagrima() {
+    var score = lagrimaScore();
+    var t0 = audioCtx.currentTime + 0.25;
+    score.events.forEach(function (e) {
+      var src = audioCtx.createBufferSource();
+      src.buffer = pluckBuffer(e[1]);
+      var g = audioCtx.createGain();
+      g.gain.value = e[2];
+      src.connect(g); g.connect(guitarMaster);
+      src.start(t0 + e[0] * SPB);
+      liveSources.push(src);
+    });
+    if (liveSources.length > 400) liveSources.splice(0, liveSources.length - 200);
+    var totalMs = (score.beats * SPB + 3) * 1000; // 3s of rest, then again
+    loopTimer = setTimeout(function () {
+      if (ambientOn) scheduleLagrima();
+    }, totalMs);
+  }
   function startAmbient() {
     try {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       audioCtx.resume();
-      var master = audioCtx.createGain(); master.gain.value = 0;
-      var filter = audioCtx.createBiquadFilter();
-      filter.type = 'lowpass'; filter.frequency.value = 1200;
-      master.connect(filter); filter.connect(audioCtx.destination);
-      var drones = [[110, 0.05], [164.81, 0.035], [220, 0.02]].map(function (cfg) {
-        var o = audioCtx.createOscillator(); o.type = 'sine'; o.frequency.value = cfg[0];
-        var g = audioCtx.createGain(); g.gain.value = cfg[1];
-        var lfo = audioCtx.createOscillator(); lfo.frequency.value = 1 / 9; // breathe with the battery
-        var lg = audioCtx.createGain(); lg.gain.value = cfg[1] * 0.5;
-        lfo.connect(lg); lg.connect(g.gain);
-        o.connect(g); g.connect(master);
-        o.start(); lfo.start();
-        return { o: o, lfo: lfo };
-      });
-      master.gain.linearRampToValueAtTime(1, audioCtx.currentTime + 2.5);
-      ambientNodes = { master: master, drones: drones };
+      guitarMaster = audioCtx.createGain();
+      guitarMaster.gain.value = 0;
+      var comp = audioCtx.createDynamicsCompressor();
+      guitarMaster.connect(comp); comp.connect(audioCtx.destination);
+      guitarMaster.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 1.5);
       ambientOn = true;
-      scheduleNote();
+      scheduleLagrima();
       els.btnMusic.classList.add('on');
     } catch (e) { toast('Audio unavailable'); }
   }
-  function scheduleNote() {
-    noteTimer = setTimeout(function () {
-      if (!ambientOn || !ambientNodes) return;
-      var f = SCALE[Math.floor(Math.random() * SCALE.length)] * (Math.random() < 0.3 ? 2 : 1);
-      var o = audioCtx.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
-      var g = audioCtx.createGain(); g.gain.value = 0;
-      o.connect(g); g.connect(ambientNodes.master);
-      var t = audioCtx.currentTime;
-      g.gain.linearRampToValueAtTime(0.045, t + 1.8);
-      g.gain.linearRampToValueAtTime(0, t + 7);
-      o.start(t); o.stop(t + 7.2);
-      scheduleNote();
-    }, 5000 + Math.random() * 9000);
-  }
   function stopAmbient() {
     ambientOn = false;
-    clearTimeout(noteTimer);
-    if (ambientNodes && audioCtx) {
-      var n = ambientNodes;
-      n.master.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.2);
+    clearTimeout(loopTimer);
+    if (guitarMaster && audioCtx) {
+      guitarMaster.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.8);
+      var srcs = liveSources; liveSources = [];
       setTimeout(function () {
-        n.drones.forEach(function (d) { try { d.o.stop(); d.lfo.stop(); } catch (e) {} });
-      }, 1400);
-      ambientNodes = null;
+        srcs.forEach(function (s) { try { s.stop(); } catch (e) {} });
+      }, 1000);
     }
     els.btnMusic.classList.remove('on');
   }
-  els.btnMusic.addEventListener('click', function () {
-    settings.ambient = !ambientOn;
-    saveSet();
-    if (ambientOn) stopAmbient(); else startAmbient();
-  });
-  // iOS는 터치 전 소리를 막으므로, 첫 터치(아무 곳)에 자동 시작
-  function armAmbient() {
-    if (settings.ambient && !ambientOn) startAmbient();
-  }
-  document.addEventListener('pointerdown', armAmbient, { passive: true });
-  document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'hidden' && ambientOn) stopAmbient();
-    else if (document.visibilityState === 'visible' && settings.ambient && !ambientOn) {
-      try { startAmbient(); } catch (e) { /* 다음 터치 때 armAmbient가 처리 */ }
-    }
-  });
-  if (settings.ambient) els.btnMusic.classList.add('on'); // 시작 전에도 상태 표시
-
   /* ---------- Dark mode toggle ---------- */
   var SUN_ICON = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
   var MOON_ICON = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';

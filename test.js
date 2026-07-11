@@ -12,14 +12,15 @@ const HH = (dt) => `${dt.getFullYear()}-${dt.getMonth() + 1}-${dt.getDate()} ${d
 
 /* 2026-07 달력: 7/10(금) 7/11(토) 7/12(일) 7/13(월) 7/14(화) */
 
-// --- v2: 활성 유형은 밤당직 하나
-eq('ACTIVE_TYPES = night only', L.ACTIVE_TYPES, ['night']);
+// --- 달력 기반 판별: 밤당직은 월-금 시작, 주말 24h는 토·일 시작
+ok('plausible night Mon', L.plausibleStart('night', D(2026, 7, 13, 19, 0)));
+ok('implausible night Sat', !L.plausibleStart('night', D(2026, 7, 11, 19, 0)));
+ok('plausible weekend Sat', L.plausibleStart('weekend', D(2026, 7, 11, 7, 0)));
+ok('implausible weekend Mon', !L.plausibleStart('weekend', D(2026, 7, 13, 7, 0)));
 
 // --- 밤당직 창: 금요일 22시 → 금 19:00 ~ 토 07:00
 let w = L.shiftWindow('night', D(2026, 7, 10, 22, 0));
 eq('night window Fri22', [HH(w.start), HH(w.end)], ['2026-7-10 19:00', '2026-7-11 7:00']);
-
-// --- 자정 넘긴 새벽 3시(토) → 시작은 전날(금) 19시
 w = L.shiftWindow('night', D(2026, 7, 11, 3, 0));
 eq('night window Sat03 (crossed midnight)', [HH(w.start), HH(w.end)], ['2026-7-10 19:00', '2026-7-11 7:00']);
 
@@ -27,24 +28,26 @@ eq('night window Sat03 (crossed midnight)', [HH(w.start), HH(w.end)], ['2026-7-1
 ok('percent 50%', Math.abs(L.percent(D(2026, 7, 11, 1, 0), D(2026, 7, 10, 19, 0), D(2026, 7, 11, 7, 0)) - 0.5) < 1e-9);
 ok('percent clamp low', L.percent(D(2026, 7, 10, 18, 0), D(2026, 7, 10, 19, 0), D(2026, 7, 11, 7, 0)) === 0);
 ok('percent clamp high', L.percent(D(2026, 7, 11, 9, 0), D(2026, 7, 10, 19, 0), D(2026, 7, 11, 7, 0)) === 1);
+// 토 16시, 주말 당직(토 07 시작) = 9/24 = 37.5%
+ok('percent Sat16 weekend 37.5%', Math.abs(L.percent(D(2026, 7, 11, 16, 0), D(2026, 7, 11, 7, 0), D(2026, 7, 12, 7, 0)) - 0.375) < 1e-9);
 
-// --- 시작용 창
-w = L.windowForStart('night', D(2026, 7, 10, 18, 30));
-eq('start 18:30 → preStart today 19', [HH(w.start), w.preStart], ['2026-7-10 19:00', true]);
-w = L.windowForStart('night', D(2026, 7, 10, 22, 10));
-eq('start 22:10 → backdated 19:00', [HH(w.start), w.preStart], ['2026-7-10 19:00', false]);
-w = L.windowForStart('night', D(2026, 7, 11, 6, 50));
-eq('start 06:50 → rolls to tonight', [HH(w.start), w.preStart], ['2026-7-11 19:00', true]);
-
-// --- 제안: 항상 밤당직 1개
-let s = L.suggest(D(2026, 7, 10, 22, 0)); // 금 22시 → 진행 중 창
-eq('suggest Fri22', [s.length, s[0].type, HH(s[0].start), s[0].preStart], [1, 'night', '2026-7-10 19:00', false]);
-s = L.suggest(D(2026, 7, 11, 10, 0));     // 토 10시 → 오늘 19시 예정
-eq('suggest Sat10 → tonight preStart', [s[0].type, HH(s[0].start), s[0].preStart], ['night', '2026-7-11 19:00', true]);
-s = L.suggest(D(2026, 7, 13, 3, 0));      // 월 03시 → 일 19시 시작 창 진행 중
-eq('suggest Mon03 → started Sun19', [HH(s[0].start), s[0].preStart], ['2026-7-12 19:00', false]);
-s = L.suggest(D(2026, 7, 13, 11, 0));     // 월 11시 → 오늘 19시 예정
-eq('suggest Mon11 → tonight preStart', [HH(s[0].start), s[0].preStart], ['2026-7-13 19:00', true]);
+// --- 자동 판별 (교수님 사례 포함)
+let s = L.suggest(D(2026, 7, 11, 16, 0)); // 토 16시 → 주말 24h, 토 07시부터 진행 중!
+eq('suggest Sat16 → weekend running since 07', [s.length, s[0].type, HH(s[0].start), s[0].preStart], [1, 'weekend', '2026-7-11 7:00', false]);
+s = L.suggest(D(2026, 7, 10, 22, 0));      // 금 22시 → 밤당직 진행 중
+eq('suggest Fri22 → night running', [s[0].type, HH(s[0].start), s[0].preStart], ['night', '2026-7-10 19:00', false]);
+s = L.suggest(D(2026, 7, 11, 10, 0));      // 토 10시 → 주말 진행 중
+eq('suggest Sat10 → weekend running', [s[0].type, HH(s[0].start), s[0].preStart], ['weekend', '2026-7-11 7:00', false]);
+s = L.suggest(D(2026, 7, 11, 6, 30));      // 토 06:30 → 금요 밤당직 막바지
+eq('suggest Sat0630 → Fri night tail', [s[0].type, HH(s[0].start), s[0].preStart], ['night', '2026-7-10 19:00', false]);
+s = L.suggest(D(2026, 7, 12, 3, 0));       // 일 03시 → 토 07시 주말 당직
+eq('suggest Sun03 → weekend from Sat07', [s[0].type, HH(s[0].start)], ['weekend', '2026-7-11 7:00']);
+s = L.suggest(D(2026, 7, 13, 3, 0));       // 월 03시 → 일 07시 주말 당직 꼬리
+eq('suggest Mon03 → weekend from Sun07', [s[0].type, HH(s[0].start)], ['weekend', '2026-7-12 7:00']);
+s = L.suggest(D(2026, 7, 14, 3, 0));       // 화 03시 → 월 19시 밤당직
+eq('suggest Tue03 → night from Mon19', [s[0].type, HH(s[0].start)], ['night', '2026-7-13 19:00']);
+s = L.suggest(D(2026, 7, 13, 11, 0));      // 월 11시 → 오늘 19시 예정(대기)
+eq('suggest Mon11 → tonight preStart', [s[0].type, HH(s[0].start), s[0].preStart], ['night', '2026-7-13 19:00', true]);
 
 // --- 과거 기록용 weekend 정의는 유지 (표시용)
 ok('weekend def kept for history', L.SHIFT_DEFS.weekend && L.SHIFT_DEFS.weekend.durH === 24);

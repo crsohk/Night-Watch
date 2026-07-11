@@ -151,14 +151,15 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
 .btn-side:active{transform:scale(.93);}
 .btn-side[disabled]{opacity:.32;}
 .btn-call{flex:1;height:60px;border-radius:17px;position:relative;overflow:hidden;
-  background:linear-gradient(160deg,#37D260 0%,#27B24C 72%,#1E9C43 100%);
-  box-shadow:0 9px 22px -8px rgba(47,190,84,.55), inset 0 1px 0 rgba(255,255,255,.4);
-  color:#06280F;font-weight:900;font-size:1.16rem;letter-spacing:.1em;
+  background:linear-gradient(160deg,#DA9C47 0%,#BE8232 70%,#A9762F 100%);
+  box-shadow:0 9px 22px -8px rgba(169,118,47,.6), inset 0 1px 0 rgba(255,255,255,.38);
+  color:#2A1A05;font-weight:900;font-size:1.16rem;letter-spacing:.1em;
   display:flex;align-items:center;justify-content:center;gap:12px;
   transition:transform .12s ease;}
 .btn-call:active{transform:scale(.97);}
-.btn-call .cnt{background:rgba(255,255,255,.34);border-radius:100px;padding:3px 13px;font-size:.98rem;font-variant-numeric:tabular-nums;letter-spacing:0;}
-.btn-call.flash::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,.4);animation:flash .4s ease-out;}
+.btn-call .cnt{background:rgba(255,255,255,.36);border-radius:100px;padding:3px 13px;font-size:.98rem;font-variant-numeric:tabular-nums;letter-spacing:0;}
+.btn-call.flash::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,.45);
+  animation:flash .4s ease-out forwards;pointer-events:none;}
 @keyframes flash{from{opacity:1;}to{opacity:0;}}
 
 /* ---------- Message ---------- */
@@ -269,9 +270,12 @@ main{flex:1;min-height:0;display:flex;flex-direction:column;}
 .sheet .hint{margin-top:6px;font-size:.8rem;color:var(--ink-3);line-height:1.55;}
 .sheet .hint b{color:var(--ink-2);}
 .f-row{display:grid;grid-template-columns:64px 1fr;gap:9px;align-items:center;margin-top:10px;}
-.f-row.trio{grid-template-columns:52px 1fr 1.1fr;}
-.f-row.trio.pick{grid-template-columns:52px 1fr 1.1fr 40px;}
+.f-row.trio{grid-template-columns:44px 1fr 1fr 40px;}
 .f-row .rl{font-size:.72rem;font-weight:900;letter-spacing:.08em;color:var(--amber);}
+.btn-paste{display:none;width:100%;margin-top:12px;height:48px;border-radius:13px;
+  background:var(--amber-soft);border:1px solid rgba(169,118,47,.4);color:var(--ink);
+  font-weight:900;font-size:.9rem;letter-spacing:.08em;}
+.btn-paste.on{display:block;}
 .f-in{width:100%;background:#fff;border:1px solid var(--line);border-radius:11px;
   padding:10px 12px;color:var(--ink);font-size:16px;outline:none;}
 .f-in:focus{border-color:var(--amber);}
@@ -363,7 +367,7 @@ body.tighter .tab{padding:7px 20px;}
       <!-- ===== STANDBY ===== -->
       <section class="view" id="view-standby">
         <h1 class="greet" id="greetTitle">Tonight's watch</h1>
-        <p class="greet-sub" id="greetSub">Start your shift. Late taps still count from 19:00.</p>
+        <p class="greet-sub" id="greetSub">Weeknights 19:00 → 07:00 · Weekends 07:00 → 07:00. Backdated automatically.</p>
         <div class="wx" id="wxStandby"></div>
         <div id="sugBox"></div>
         <div class="line-sec">
@@ -459,20 +463,29 @@ body.tighter .tab{padding:7px 20px;}
   <div class="scrim" id="scrim"></div>
   <div class="sheet" id="sheet">
     <h3>CALL LINE SETUP</h3>
-    <p class="hint"><b>GW1 · GW2 · ICU · PA</b> - long-press a field and pick <b>AutoFill → Contact</b> to pull from your address book. With a number saved, tapping the card dials instantly; with a name only, the shortcut searches Contacts by name. <b>ANE · ER · OR</b> are fixed lines. Numbers never appear on the main screen.</p>
+    <p class="hint"><b>GW1 · GW2 · ICU · PA</b> - tap the <b>contact button</b> next to a row to pull name and number from your address book. With a number saved, tapping the card dials instantly. <b>ANE · ER · OR</b> are fixed lines. Numbers never appear on the main screen.</p>
+    <button class="btn-paste" id="pasteBar" type="button">PASTE FROM CONTACTS</button>
     <div id="teamForm"></div>
     <div id="fixedForm" style="margin-top:14px"></div>
     <details class="sc-guide" id="scGuide">
-      <summary><b>Name-only dialing shortcut (optional, 1 min)</b></summary>
+      <summary><b>Contact button setup (once, 2 min)</b></summary>
       <div style="margin-top:7px">
-      1. Shortcuts app → <b>＋</b><br>
-      2. Add action <b>Find Contacts</b>: filter Name contains <b>Shortcut Input</b>, limit 1<br>
-      3. Add action <b>Call</b>: contact = result<br>
-      4. Save as <b>DutyCall</b>. (Not needed if numbers are saved.)
+      <b>Option A - native picker (best):</b> iPhone Settings → Apps → Safari →
+      Advanced → Feature Flags → turn on <b>Contact Picker API</b>.
+      The contact button then opens your address book directly.<br><br>
+      <b>Option B - picker shortcut:</b> Shortcuts app → ＋ →<br>
+      1. <b>Select Contact</b><br>
+      2. <b>Text</b>: insert the contact variable, new line, then its <b>Phone Number</b><br>
+      3. <b>Copy to Clipboard</b> → save as <b>PickContact</b>.<br>
+      The contact button runs it, then tap PASTE FROM CONTACTS here.<br><br>
+      <b>Dial-by-name shortcut (optional):</b> ＋ → <b>Find Contacts</b>
+      (Name contains Shortcut Input, limit 1) → <b>Call</b> → save as <b>DutyCall</b>.
       </div>
     </details>
-    <div class="f-row" style="margin-top:12px"><span class="rl">SHORTCUT</span>
+    <div class="f-row" style="margin-top:12px"><span class="rl">DIAL SC</span>
       <input class="f-in" id="scName" placeholder="DutyCall"></div>
+    <div class="f-row"><span class="rl">PICK SC</span>
+      <input class="f-in" id="scPick" placeholder="PickContact"></div>
     <div class="sheet-btns">
       <button class="btn-sheet no" id="sheetCancel" type="button">CLOSE</button>
       <button class="btn-sheet ok" id="sheetSave" type="button">SAVE</button>

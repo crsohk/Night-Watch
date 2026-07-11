@@ -4,10 +4,9 @@
 
 /* ================= Constants ================= */
 var SHIFT_DEFS = {
-  night:   { key: 'night',   label: 'NIGHT SHIFT', startHour: 19, durH: 12 },
-  weekend: { key: 'weekend', label: 'WEEKEND 24H', startHour: 7,  durH: 24 } // legacy records only
+  night:   { key: 'night',   label: 'NIGHT SHIFT', startHour: 19, durH: 12 }, // Mon-Fri 19:00 → +12h
+  weekend: { key: 'weekend', label: 'WEEKEND 24H', startHour: 7,  durH: 24 }  // Sat/Sun 07:00 → +24h
 };
-var ACTIVE_TYPES = ['night'];
 var HOSPITAL = { name: 'SNUBH GS', lat: 37.352, lon: 127.125 };
 var NAME_ROLES = [ // dial by saved number, or by name via Shortcuts
   { k: 'gw1', label: 'GW1' }, { k: 'gw2', label: 'GW2' },
@@ -78,11 +77,32 @@ function percent(now, start, end) {
   return Math.max(0, Math.min(1, p));
 }
 
+/* Calendar-based detection: night shifts start Mon-Fri, weekend 24h shifts start Sat/Sun. */
+function plausibleStart(type, d) {
+  var day = d.getDay();
+  return type === 'night' ? (day >= 1 && day <= 5) : (day === 0 || day === 6);
+}
+/* Single suggestion: the window containing now (calendar-consistent),
+   otherwise the nearest upcoming plausible window. */
 function suggest(now) {
-  return ACTIVE_TYPES.map(function (t) {
-    var w = windowForStart(t, now);
-    return { type: t, start: w.start, end: w.end, preStart: w.preStart };
+  var types = ['night', 'weekend'];
+  for (var i = 0; i < types.length; i++) {
+    var w = shiftWindow(types[i], now);
+    if (now >= w.start && now < w.end && plausibleStart(types[i], w.start)) {
+      return [{ type: types[i], start: w.start, end: w.end, preStart: false }];
+    }
+  }
+  var best = null;
+  types.forEach(function (t) {
+    var def = SHIFT_DEFS[t];
+    var s = new Date(now); s.setHours(def.startHour, 0, 0, 0);
+    if (s <= now) s = new Date(s.getTime() + DAY);
+    for (var k = 0; k < 8 && !plausibleStart(t, s); k++) s = new Date(s.getTime() + DAY);
+    if (!best || s < best.start) {
+      best = { type: t, start: s, end: new Date(s.getTime() + def.durH * HOUR), preStart: true };
+    }
   });
+  return [best];
 }
 
 function busiestHour(callsMs) {
@@ -187,7 +207,23 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   });
   delete settings.phones; delete settings.quickDial;
   settings.shortcutName = settings.shortcutName || 'DutyCall';
+  settings.pickShortcut = settings.pickShortcut || 'PickContact';
   saveSet();
+
+  // 잘못 잡힌 대기 상태 교정: 시작 전(preStart) 당직이 저장돼 있는데
+  // 달력상 지금 진행 중인 당직이 있으면 그 창으로 바꿔준다 (v2.1 → v2.2 버그 픽스)
+  (function fixMistimedStart() {
+    if (!state.current) return;
+    if (state.current.start > Date.now()) {
+      var s = suggest(new Date())[0];
+      if (!s.preStart) {
+        state.current.type = s.type;
+        state.current.start = s.start.getTime();
+        state.current.end = s.end.getTime();
+        save();
+      }
+    }
+  })();
 
   var wxCache = load(LS_WX);
   var activeTab = 'watch';
@@ -215,7 +251,8 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     chartBox: $('chartBox'), chartBars: $('chartBars'), hxList: $('hxList'), hxEmpty: $('hxEmpty'),
     btnClearHx: $('btnClearHx'),
     scrim: $('scrim'), sheet: $('sheet'), teamForm: $('teamForm'), fixedForm: $('fixedForm'),
-    scName: $('scName'), sheetSave: $('sheetSave'), sheetCancel: $('sheetCancel'),
+    scName: $('scName'), scPick: $('scPick'), pasteBar: $('pasteBar'),
+    sheetSave: $('sheetSave'), sheetCancel: $('sheetCancel'),
     logSheet: $('logSheet'), logList: $('logList'), logCount: $('logCount'),
     btnEndShift: $('btnEndShift'), logClose: $('logClose'),
     dlg: $('dlg'), dlgText: $('dlgText'), dlgSub: $('dlgSub'), dlgOk: $('dlgOk'), dlgNo: $('dlgNo'),
@@ -263,34 +300,36 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   }
   function renderStandby(now) {
     els.greetTitle.textContent = greet(now);
-    els.greetSub.textContent = 'Start your shift. Late taps still count from 19:00.';
+    els.greetSub.textContent = 'Weeknights 19:00 → 07:00 · Weekends 07:00 → 07:00. The app reads the calendar and backdates automatically.';
     var s = suggest(now)[0];
+    var moonIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A9762F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+    var sunIcon = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A9762F" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
     var note = s.preStart
       ? 'Start now and tracking begins at ' + fmtClock(s.start) + ' sharp.'
       : 'Already ' + fmtHMS(now - s.start) + ' in. Backdated to ' + fmtClock(s.start) + '.';
     els.sugBox.innerHTML =
       '<div class="sug"><div class="sug-top"><div class="sug-ic">' +
-      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#A9762F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>' +
-      '</div><div><h2>' + SHIFT_DEFS.night.label + '</h2>' +
+      (s.type === 'night' ? moonIcon : sunIcon) +
+      '</div><div><h2>' + SHIFT_DEFS[s.type].label + '</h2>' +
       '<div class="win">' + fmtWin(s, now) + '</div></div></div>' +
       '<div class="note">' + note + '</div>' +
       '<button class="btn-start" id="btnStart" type="button">START SHIFT</button></div>';
-    $('btnStart').addEventListener('click', function () { startShift('night'); });
+    $('btnStart').addEventListener('click', startShift);
     renderLine(els.lineGrid1);
   }
 
-  function startShift(type) {
+  function startShift() {
     var now = new Date();
-    var w = windowForStart(type, now);
+    var s = suggest(now)[0];
     state.current = {
-      id: 'S' + now.getTime(), type: type,
-      start: w.start.getTime(), end: w.end.getTime(),
+      id: 'S' + now.getTime(), type: s.type,
+      start: s.start.getTime(), end: s.end.getTime(),
       calls: [], startedAt: now.getTime()
     };
     save();
     lastMsgHour = -1;
     renderAll();
-    toast('Shift started · from ' + fmtClock(w.start));
+    toast(SHIFT_DEFS[s.type].label + ' started · from ' + fmtClock(s.start));
   }
 
   /* ---------- Active ---------- */
@@ -574,9 +613,10 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     }).catch(function () { renderWeather(); });
   }
 
-  /* ---------- Edit sheet ---------- */
+  /* ---------- Edit sheet & contact picking ---------- */
   var hasPicker = ('contacts' in navigator && 'select' in navigator.contacts);
-  function pickContact(k) {
+  var pendingPick = null; // role key waiting for shortcut-clipboard round trip
+  function nativePick(k) {
     navigator.contacts.select(['name', 'tel'], { multiple: false }).then(function (res) {
       if (!res || !res.length) return;
       var c = res[0];
@@ -585,22 +625,52 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       if (tEl && c.tel && c.tel.length) tEl.value = c.tel[0];
     }).catch(function () { /* user cancelled */ });
   }
+  function shortcutPick(k) {
+    pendingPick = k;
+    location.href = 'shortcuts://run-shortcut?name=' +
+      encodeURIComponent(settings.pickShortcut || 'PickContact');
+  }
+  function roleLabelOf(k) {
+    for (var i = 0; i < NAME_ROLES.length; i++) if (NAME_ROLES[i].k === k) return NAME_ROLES[i].label;
+    return k;
+  }
+  function updatePasteBar() {
+    if (pendingPick) {
+      els.pasteBar.textContent = 'PASTE ' + roleLabelOf(pendingPick) + ' FROM CONTACTS';
+      els.pasteBar.classList.add('on');
+    } else els.pasteBar.classList.remove('on');
+  }
+  function parsePicked(text) {
+    var tel = '', name = '';
+    String(text).split(/[\n|]/).forEach(function (line) {
+      var t = line.trim();
+      if (!t) return;
+      if (!tel && /^[\d\s\-+().#*]{7,}$/.test(t)) tel = t;
+      else if (!name && !/^[\d\s\-+().#*]+$/.test(t)) name = t;
+    });
+    return { name: name, tel: tel };
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') updatePasteBar();
+  });
   function openSheet() {
     var tf = '';
     NAME_ROLES.forEach(function (r) {
-      tf += '<div class="f-row trio' + (hasPicker ? ' pick' : '') + '"><span class="rl">' + r.label + '</span>' +
+      tf += '<div class="f-row trio"><span class="rl">' + r.label + '</span>' +
         '<input class="f-in" id="tn_' + r.k + '" placeholder="Name" autocomplete="off" value="' + esc(settings.teamNames[r.k] || '') + '">' +
-        '<input class="f-in" id="tt_' + r.k + '" placeholder="Number (long-press)" inputmode="tel" autocomplete="off" value="' + esc(settings.teamTels[r.k] || '') + '">' +
-        (hasPicker ? '<button class="pick-btn" data-pick="' + r.k + '" type="button" aria-label="Pick from contacts">' +
-          '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></button>' : '') +
+        '<input class="f-in" id="tt_' + r.k + '" placeholder="Number" inputmode="tel" autocomplete="off" value="' + esc(settings.teamTels[r.k] || '') + '">' +
+        '<button class="pick-btn" data-pick="' + r.k + '" type="button" aria-label="Pick from contacts">' +
+        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></button>' +
         '</div>';
     });
     els.teamForm.innerHTML = tf;
-    if (hasPicker) {
-      els.teamForm.querySelectorAll('[data-pick]').forEach(function (b) {
-        b.addEventListener('click', function () { pickContact(b.getAttribute('data-pick')); });
+    els.teamForm.querySelectorAll('[data-pick]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-pick');
+        if (hasPicker) nativePick(k); else shortcutPick(k);
       });
-    }
+    });
+    updatePasteBar();
     var ff = '';
     FIXED_ROLES.forEach(function (r) {
       ff += '<div class="f-row"><span class="rl">' + r.label + '</span>' +
@@ -608,8 +678,22 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     });
     els.fixedForm.innerHTML = ff;
     els.scName.value = settings.shortcutName || 'DutyCall';
+    els.scPick.value = settings.pickShortcut || 'PickContact';
     els.scrim.classList.add('on'); els.sheet.classList.add('on');
   }
+  els.pasteBar.addEventListener('click', function () {
+    var k = pendingPick;
+    if (!k || !navigator.clipboard || !navigator.clipboard.readText) return;
+    navigator.clipboard.readText().then(function (text) {
+      var p = parsePicked(text);
+      var nEl = $('tn_' + k), tEl = $('tt_' + k);
+      if (nEl && p.name) nEl.value = p.name;
+      if (tEl && p.tel) tEl.value = p.tel;
+      pendingPick = null;
+      updatePasteBar();
+      if (!p.name && !p.tel) toast('Clipboard had no contact. Run PickContact first.');
+    }).catch(function () { toast('Allow paste to fill from Contacts'); });
+  });
   function closeSheets() {
     els.scrim.classList.remove('on');
     els.sheet.classList.remove('on');
@@ -626,6 +710,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       if (n) settings.fixed[r.k] = n.value.trim();
     });
     settings.shortcutName = (els.scName.value.trim() || 'DutyCall');
+    settings.pickShortcut = (els.scPick.value.trim() || 'PickContact');
     saveSet(); closeSheets();
     renderLine(els.lineGrid1); renderLine(els.lineGrid2);
     toast('Saved');
@@ -740,7 +825,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
 /* ================= Exports for node tests ================= */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    SHIFT_DEFS: SHIFT_DEFS, ACTIVE_TYPES: ACTIVE_TYPES,
+    SHIFT_DEFS: SHIFT_DEFS, plausibleStart: plausibleStart,
     shiftWindow: shiftWindow, windowForStart: windowForStart,
     percent: percent, suggest: suggest, fmtHMS: fmtHMS, fmtDur: fmtDur,
     busiestHour: busiestHour, wmo: wmo, wxIndexFor: wxIndexFor,

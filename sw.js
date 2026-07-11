@@ -1,6 +1,6 @@
 /* Night Watch — offline-first service worker */
 'use strict';
-const VERSION = 'nightwatch-v2.5.0';
+const VERSION = 'nightwatch-v2.5.1';
 const ASSETS = [
   './',
   './index.html',
@@ -36,10 +36,33 @@ self.addEventListener('fetch', (e) => {
   // 외부 요청(날씨 API 등)은 손대지 않는다 — 네트워크 실패 시 앱이 캐시된 데이터로 처리
   if (url.origin !== location.origin || e.request.method !== 'GET') return;
 
-  // 내비게이션은 캐시된 index.html로 (완전 오프라인 구동)
+  // 내비게이션: 네트워크 우선(항상 최신), 실패 시 캐시(오프라인 구동)
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      caches.match('./index.html').then((r) => r || fetch(e.request))
+      fetch(e.request)
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(VERSION).then((c) => c.put('./index.html', copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+  // app.js도 네트워크 우선 (배포 즉시 반영)
+  if (url.pathname.endsWith('/app.js')) {
+    e.respondWith(
+      fetch(e.request)
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(VERSION).then((c) => c.put(e.request, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(e.request))
     );
     return;
   }

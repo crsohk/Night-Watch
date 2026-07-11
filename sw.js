@@ -1,11 +1,13 @@
 /* Night Watch — offline-first service worker */
 'use strict';
-const VERSION = 'nightwatch-v2.3.0';
+const VERSION = 'nightwatch-v2.5.0';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
   './manifest.webmanifest',
+  './snubh_hi.jpg',
+  './muhwanja-leaf.jpg',
   './fonts/lato-latin-400-normal.woff2',
   './fonts/lato-latin-700-normal.woff2',
   './fonts/lato-latin-900-normal.woff2',

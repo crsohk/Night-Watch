@@ -7,17 +7,20 @@ var SHIFT_DEFS = {
   night:   { key: 'night',   label: 'NIGHT SHIFT', startHour: 19, durH: 12 }, // Mon-Fri 19:00 → +12h
   weekend: { key: 'weekend', label: 'WEEKEND 24H', startHour: 7,  durH: 24 }  // Sat/Sun 07:00 → +24h
 };
-var HOSPITAL = { name: 'SNUBH GS', lat: 37.352, lon: 127.125 };
+var HOSPITAL = { name: 'SNUBH GS', short: 'BUNDANG', lat: 37.352, lon: 127.125 };
 var NAME_ROLES = [ // dial by saved number, or by name via Shortcuts
   { k: 'gw1', label: 'GW1' }, { k: 'gw2', label: 'GW2' },
-  { k: 'icu', label: 'ICU' }, { k: 'pa', label: 'PA' }
+  { k: 'icu', label: 'ICU' }, { k: 'pa',  label: 'PA'  },
+  { k: 'cr',  label: 'CR'  }, { k: 'ugi', label: 'UGI' },
+  { k: 'hbp', label: 'HBP' }, { k: 'vas', label: 'VAS' }
 ];
 var FIXED_ROLES = [ // fixed lines; numbers never shown on the main screen
-  { k: 'anes', label: 'ANE', def: '010-3079-8352' },
-  { k: 'er',   label: 'ER',  def: '031-787-3001' },
-  { k: 'or',   label: 'OR',  def: '031-787-3355', wide: true }
+  { k: 'er',   label: 'ER',   def: '031-787-3001' },
+  { k: 'anes', label: 'ANE',  def: '010-3079-8352' },
+  { k: 'or',   label: 'OR',   def: '031-787-3355' },
+  { k: 'eicu', label: 'EICU', def: '031-787-3700' }
 ];
-var LS_STATE = 'nw:v1', LS_SET = 'nw:set:v1', LS_WX = 'nw:wx:v1';
+var LS_STATE = 'nw:v1', LS_SET = 'nw:set:v1', LS_WX = 'nw:wx:v1', LS_NEWS = 'nw:news:v1';
 var DAY = 86400000, HOUR = 3600000;
 
 /* ================= Pure logic ================= */
@@ -187,10 +190,48 @@ var DONE_QUOTES = ['Sleep is waiting, sweeter than spice.',
   'Morning is a gift for those who crossed the desert.',
   'The battery remembers tonight. Now rest.'];
 
+/* Quotes for surgeons and long nights - shown in rotation with the hourly lines */
+var QUOTES = [
+  ['Wherever the art of medicine is loved, there is also a love of humanity.', 'Hippocrates'],
+  ['Healing is a matter of time, but it is sometimes also a matter of opportunity.', 'Hippocrates'],
+  ['The best preparation for tomorrow is to do today\'s work superbly well.', 'William Osler'],
+  ['Medicine is a science of uncertainty and an art of probability.', 'William Osler'],
+  ['Imperturbability and calm: equanimity is the physician\'s first virtue.', 'William Osler, Aequanimitas'],
+  ['I dressed him, and God healed him.', 'Ambroise Pare'],
+  ['The good surgeon knows how to operate; the better, when to; the best, when not to.', 'Surgical aphorism'],
+  ['To cure sometimes, to relieve often, to comfort always.', 'Medical proverb'],
+  ['In surgery, eyes first and most; fingers next and little; tongue last and least.', 'Humphry Rolleston'],
+  ['If you\'re going through hell, keep going.', 'Winston Churchill'],
+  ['What stands in the way becomes the way.', 'Marcus Aurelius'],
+  ['You have power over your mind, not outside events. Realize this, and you will find strength.', 'Marcus Aurelius'],
+  ['Courage is not the absence of fear, but the triumph over it.', 'Nelson Mandela'],
+  ['It always seems impossible until it is done.', 'Nelson Mandela'],
+  ['He who has a why to live can bear almost any how.', 'Friedrich Nietzsche'],
+  ['Fall seven times, stand up eight.', 'Japanese proverb'],
+  ['A smooth sea never made a skilled sailor.', 'Proverb'],
+  ['Do what you can, with what you have, where you are.', 'Theodore Roosevelt'],
+  ['Energy and persistence conquer all things.', 'Benjamin Franklin'],
+  ['Per aspera ad astra. Through hardships, to the stars.', 'Latin proverb'],
+  ['The night is darkest just before the dawn.', 'Proverb'],
+  ['Little by little, one travels far.', 'Proverb'],
+  ['Fear is the mind-killer.', 'Frank Herbert, Dune'],
+  ['Without change, something sleeps inside us and seldom awakens.', 'Frank Herbert, Dune']
+];
+
 function messageFor(now, preStart) {
   if (preStart) return MSG_PRESTART[now.getDate() % MSG_PRESTART.length];
   var arr = MSGS[now.getHours()] || MSGS[0];
   return arr[(now.getDate() + now.getHours()) % arr.length];
+}
+/* Alternate every 10 minutes: hourly line ↔ quote */
+function displayLine(now, preStart) {
+  if (preStart) return { text: messageFor(now, true), who: 'NIGHT WATCH' };
+  var bucket = Math.floor(now.getMinutes() / 10);
+  if (bucket % 2 === 1) {
+    var q = QUOTES[(now.getDate() * 7 + now.getHours() * 3 + bucket) % QUOTES.length];
+    return { text: '"' + q[0] + '"', who: q[1].toUpperCase() };
+  }
+  return { text: messageFor(now, false), who: 'NIGHT WATCH · ' + pad2(now.getHours()) + ':00' };
 }
 
 /* ================= Browser only ================= */
@@ -226,8 +267,9 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   })();
 
   var wxCache = load(LS_WX);
+  var newsCache = load(LS_NEWS);
   var activeTab = 'watch';
-  var lastMsgHour = -1, wakeLock = null, wakeWanted = false;
+  var lastMsgKey = '', wakeLock = null, wakeWanted = false;
 
   function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
   function save() { localStorage.setItem(LS_STATE, JSON.stringify(state)); }
@@ -239,7 +281,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     date: $('hdrDate'), clock: $('hdrClock'), wakeBtn: $('wakeBtn'),
     vStandby: $('view-standby'), vActive: $('view-active'), vDone: $('view-done'), vHistory: $('view-history'),
     greetTitle: $('greetTitle'), greetSub: $('greetSub'), sugBox: $('sugBox'), wxStandby: $('wxStandby'),
-    chipText: $('chipText'),
+    leafMarkers: $('leafMarkers'),
     wxNowLb: $('wxNowLb'), wxNowV: $('wxNowV'), wxEndLb: $('wxEndLb'), wxEndV: $('wxEndV'),
     batFill: $('batFill'), pctNum: $('pctNum'), tElapsed: $('tElapsed'), tRemain: $('tRemain'),
     msgCard: $('msgCard'), msgText: $('msgText'), msgWho: $('msgWho'),
@@ -256,7 +298,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     logSheet: $('logSheet'), logList: $('logList'), logCount: $('logCount'),
     btnEndShift: $('btnEndShift'), logClose: $('logClose'),
     dlg: $('dlg'), dlgText: $('dlgText'), dlgSub: $('dlgSub'), dlgOk: $('dlgOk'), dlgNo: $('dlgNo'),
-    toast: $('toast')
+    toast: $('toast'), btnRefresh: $('btnRefresh'), tkA: $('tkA'), tkB: $('tkB')
   };
 
   /* ---------- Views ---------- */
@@ -273,7 +315,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     var now = new Date();
     if (state.current && now.getTime() > state.current.end + 12 * HOUR) archive(false);
     document.body.classList.toggle('dawn', state.current ? phase(now) === 'done' : false);
-    els.wakeBtn.style.display = (state.current && phase(now) === 'active' && 'wakeLock' in navigator) ? '' : 'none';
+    els.wakeBtn.style.visibility = (state.current && phase(now) === 'active' && 'wakeLock' in navigator) ? 'visible' : 'hidden';
     if (activeTab === 'history') { show('vHistory'); renderHistory(); }
     else {
       var ph = phase(now);
@@ -327,7 +369,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       calls: [], startedAt: now.getTime()
     };
     save();
-    lastMsgHour = -1;
+    lastMsgKey = '';
     renderAll();
     toast(SHIFT_DEFS[s.type].label + ' started · from ' + fmtClock(s.start));
   }
@@ -339,23 +381,20 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     var pre = now.getTime() < start;
     var p = percent(now.getTime(), start, end);
 
-    els.chipText.textContent = SHIFT_DEFS[cur.type].label + ' · ' +
-      fmtClock(new Date(start)) + ' → ' + fmtClock(new Date(end)) +
-      (pre ? ' · WAITING' : '');
-
     els.batFill.style.width = (p * 100).toFixed(2) + '%';
     els.pctNum.innerHTML = Math.floor(p * 100) + '<sup>%</sup>';
 
     els.tElapsed.textContent = fmtHMS(now.getTime() - start);
     els.tRemain.textContent = pre ? fmtHMS(end - start) : fmtHMS(end - now.getTime());
 
-    if (now.getHours() !== lastMsgHour || full) {
-      lastMsgHour = now.getHours();
-      var txt = messageFor(now, pre);
+    var msgKey = now.getHours() + '-' + Math.floor(now.getMinutes() / 10);
+    if (msgKey !== lastMsgKey || full) {
+      lastMsgKey = msgKey;
+      var line = displayLine(now, pre);
       els.msgCard.classList.add('fade');
       setTimeout(function () {
-        els.msgText.textContent = txt;
-        els.msgWho.textContent = 'NIGHT WATCH · ' + pad2(now.getHours()) + ':00';
+        els.msgText.textContent = line.text;
+        els.msgWho.textContent = line.who;
         els.msgCard.classList.remove('fade');
       }, full ? 0 : 500);
     }
@@ -372,17 +411,17 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   var TEL_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A7A61" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.4c1 .3 2 .5 3 .6a2 2 0 0 1 1.6 2z"/></svg>';
   function renderLine(grid) {
     var html = '';
-    NAME_ROLES.forEach(function (r) {
+    FIXED_ROLES.forEach(function (r) { // row 1: ER ANE OR EICU
+      var num = cleanNum(settings.fixed[r.k]);
+      html += '<button class="mate' + (num ? '' : ' no-num') + '" data-fixed-role="' + r.k + '" type="button">' +
+        '<span class="role">' + r.label + '</span>' + TEL_ICON + '</button>';
+    });
+    NAME_ROLES.forEach(function (r) { // rows 2-3: GW1 GW2 ICU PA / CR UGI HBP VAS
       var nm = settings.teamNames[r.k] || '';
       var ready = nm || cleanNum(settings.teamTels[r.k]);
       html += '<button class="mate' + (ready ? '' : ' no-num') + '" data-name-role="' + r.k + '" type="button">' +
         '<span class="role">' + r.label + '</span>' +
         '<span class="nm' + (nm ? '' : ' empty') + '">' + (nm ? esc(nm) : 'Name') + '</span></button>';
-    });
-    FIXED_ROLES.forEach(function (r) {
-      var num = cleanNum(settings.fixed[r.k]);
-      html += '<button class="mate' + (r.wide ? ' wide' : '') + (num ? '' : ' no-num') + '" data-fixed-role="' + r.k + '" type="button">' +
-        '<span class="role">' + r.label + '</span>' + TEL_ICON + '</button>';
     });
     grid.innerHTML = html;
     grid.querySelectorAll('[data-name-role]').forEach(function (b) {
@@ -405,10 +444,44 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     });
   }
 
-  /* ---------- Call counter & log sheet ---------- */
+  /* ---------- Muhwanja leaf call counter ---------- */
+  var LEAF_POSITIONS = [ // image-percent coords, clockwise from upper-left leaf
+    { x: 36,   y: 35, w: 9   },
+    { x: 44.5, y: 32, w: 9.5 },
+    { x: 53,   y: 31, w: 10  },
+    { x: 62,   y: 32, w: 9.5 },
+    { x: 71,   y: 35, w: 9   },
+    { x: 82,   y: 58, w: 10  },
+    { x: 71,   y: 61, w: 9   },
+    { x: 62,   y: 63, w: 9.5 },
+    { x: 52,   y: 65, w: 10  },
+    { x: 43,   y: 65, w: 9.5 },
+    { x: 34,   y: 63, w: 9   }
+  ];
+  function renderLeafCalls() {
+    if (!els.leafMarkers) return;
+    var calls = state.current ? state.current.calls : [];
+    var total = calls.length;
+    var visible = Math.min(total, LEAF_POSITIONS.length);
+    var html = '';
+    for (var i = 0; i < visible; i++) {
+      var pos = LEAF_POSITIONS[i];
+      var label = String(i + 1);
+      if (i === LEAF_POSITIONS.length - 1 && total > LEAF_POSITIONS.length) {
+        label = String(total); // 12th call onward: last leaf shows the running total
+      }
+      var sizeVw = pos.w * 0.66;
+      var markerSize = 'clamp(20px,' + sizeVw.toFixed(2) + 'vw,40px)';
+      html += '<span class="leaf-marker" style="left:' + pos.x + '%;top:' + pos.y +
+        '%;--marker-size:' + markerSize + ';">' + label + '</span>';
+    }
+    els.leafMarkers.innerHTML = html;
+  }
+
   function renderCalls() {
     var calls = state.current ? state.current.calls : [];
     els.callCnt.textContent = String(calls.length);
+    renderLeafCalls();
     els.btnUndo.disabled = !calls.length;
     els.logCount.textContent = calls.length + ' CALLS';
     if (!calls.length) {
@@ -563,7 +636,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     var now = new Date();
     var endD = endTarget(now);
     var d = wxCache && wxCache.data;
-    els.wxNowLb.textContent = 'NOW · ' + HOSPITAL.name.toUpperCase();
+    els.wxNowLb.textContent = 'NOW · ' + HOSPITAL.short;
     els.wxEndLb.textContent = 'END · ' + relDay(endD, now).toUpperCase() + ' ' + fmtClock(endD);
     if (d && d.current) {
       var w1 = wmo(d.current.weather_code, now.getHours());
@@ -584,7 +657,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       if (d.current) {
         var a = wmo(d.current.weather_code, now.getHours());
         html += '<div class="wx-cell"><span class="wx-ic">' + a[0] + '</span><div class="wx-t">' +
-          '<div class="wx-lb">NOW · ' + HOSPITAL.name.toUpperCase() + '</div>' +
+          '<div class="wx-lb">NOW · ' + HOSPITAL.short + '</div>' +
           '<div class="wx-v">' + Math.round(d.current.temperature_2m) + '°<small>' + a[1] + '</small></div></div></div>';
       }
       if (idx >= 0) {
@@ -657,10 +730,10 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     var tf = '';
     NAME_ROLES.forEach(function (r) {
       tf += '<div class="f-row trio"><span class="rl">' + r.label + '</span>' +
-        '<input class="f-in" id="tn_' + r.k + '" placeholder="Name" autocomplete="off" value="' + esc(settings.teamNames[r.k] || '') + '">' +
-        '<input class="f-in" id="tt_' + r.k + '" placeholder="Number" inputmode="tel" autocomplete="off" value="' + esc(settings.teamTels[r.k] || '') + '">' +
         '<button class="pick-btn" data-pick="' + r.k + '" type="button" aria-label="Pick from contacts">' +
         '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></button>' +
+        '<input class="f-in" id="tn_' + r.k + '" placeholder="Name" autocomplete="off" value="' + esc(settings.teamNames[r.k] || '') + '">' +
+        '<input class="f-in" id="tt_' + r.k + '" placeholder="Number" inputmode="tel" autocomplete="off" value="' + esc(settings.teamTels[r.k] || '') + '">' +
         '</div>';
     });
     els.teamForm.innerHTML = tf;
@@ -744,6 +817,59 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     toastTimer = setTimeout(function () { els.toast.classList.remove('on'); }, 2400);
   }
 
+  /* ---------- Refresh (bottom-left) ---------- */
+  els.btnRefresh.addEventListener('click', function () {
+    if (state.current) {
+      confirmDlg('Restart shift tracking?', 'OK clears the current shift and its calls, then re-detects from the calendar. Cancel just refreshes the display.', true, function () {
+        state.current = null;
+        save();
+        lastMsgKey = '';
+        fetchWeather(true);
+        fetchNews(true);
+        renderAll();
+        toast('Reset. Ready to start again.');
+      });
+    } else {
+      lastMsgKey = '';
+      fetchWeather(true);
+      fetchNews(true);
+      renderAll();
+      toast('Refreshed');
+    }
+  });
+
+  /* ---------- Good-news ticker ---------- */
+  var NEWS_FALLBACK = [
+    'Somewhere tonight, a patient you once operated on is sleeping soundly.',
+    'Global surgical outcomes keep improving year after year.',
+    'Every quiet minute on call is a small victory.',
+    'Coffee supplies in the call room remain stable.',
+    'Sunrise is on schedule, as always.',
+    'Your team is one call away. You are not alone tonight.'
+  ];
+  function renderTicker() {
+    var titles = (newsCache && newsCache.titles && newsCache.titles.length)
+      ? newsCache.titles : NEWS_FALLBACK;
+    var text = 'GOOD NEWS +++ ' + titles.join('  +++  ') + '  +++  ';
+    els.tkA.textContent = text;
+    els.tkB.textContent = text;
+  }
+  function fetchNews(force) {
+    if (!navigator.onLine) { renderTicker(); return; }
+    if (!force && newsCache && Date.now() - newsCache.ts < 60 * 60000) { renderTicker(); return; }
+    fetch('https://www.reddit.com/r/UpliftingNews/top.json?t=day&limit=12')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var titles = (d.data.children || []).map(function (c) { return c.data.title; })
+          .filter(function (t) { return t && t.length < 140; }).slice(0, 10);
+        if (!titles.length) throw new Error('empty');
+        newsCache = { ts: Date.now(), titles: titles };
+        localStorage.setItem(LS_NEWS, JSON.stringify(newsCache));
+        renderTicker();
+      })
+      .catch(function () { renderTicker(); });
+  }
+
   /* ---------- Keep screen on ---------- */
   if ('wakeLock' in navigator) {
     els.wakeBtn.addEventListener('click', function () {
@@ -807,13 +933,16 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     }
   }, 1000);
   setInterval(function () { fetchWeather(false); }, 30 * 60000);
-  window.addEventListener('online', function () { fetchWeather(true); });
+  setInterval(function () { fetchNews(false); }, 60 * 60000);
+  window.addEventListener('online', function () { fetchWeather(true); fetchNews(true); });
 
   /* ---------- Boot ---------- */
   renderHeader(new Date());
   lastPhase = state.current ? phase(new Date()) : 'standby';
   renderAll();
   fetchWeather(false);
+  renderTicker();
+  fetchNews(false);
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {

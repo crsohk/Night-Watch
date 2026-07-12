@@ -1,6 +1,11 @@
-/* Night Watch v3.3.3 (build 260712) - English UI, beige one-screen layout, 1.5x battery.
+/* Night Watch - English UI, beige one-screen layout, 1.5x battery.
+   Version is defined ONCE below (NW_VERSION); the on-screen footer reads it
+   automatically. When releasing, bump NW_VERSION here and VERSION in sw.js.
    Pure logic functions are exported at the bottom for node tests. */
 'use strict';
+
+/* ================= Version (single source of truth for display) ================= */
+var NW_VERSION = 'v3.3.5', NW_BUILD = '260712';
 
 /* ================= Constants ================= */
 var SHIFT_DEFS = {
@@ -447,9 +452,10 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     if (!introEl || reduce) { done(); return; }
     introEl.classList.add('on');
     requestAnimationFrame(function () { introEl.classList.add('show'); });
-    setTimeout(done, 3400);                                            // render the watch beneath
-    setTimeout(function () { introEl.classList.remove('show'); }, 3800); // fade out
-    setTimeout(function () { introEl.classList.remove('on'); }, 4300);
+    /* 5s intro: text lands ~3.3s, then dwells ~1.7s so it can be read */
+    setTimeout(done, 4600);                                            // render the watch beneath
+    setTimeout(function () { introEl.classList.remove('show'); }, 5000); // fade out
+    setTimeout(function () { introEl.classList.remove('on'); }, 5500);
   }
   function startShift() {
     var now = new Date();
@@ -1041,6 +1047,11 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       navigator.serviceWorker.register('sw.js').catch(function () { /* ignore on file:// */ });
     });
   }
+
+  /* Footer version: rendered from NW_VERSION so index.html never goes stale */
+  document.querySelectorAll('.ver').forEach(function (el) {
+    el.textContent = NW_VERSION + ' · build ' + NW_BUILD + ' · Eriksen Oh';
+  });
 })();
 
 /* ================= Exports for node tests ================= */

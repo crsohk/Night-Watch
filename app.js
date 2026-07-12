@@ -145,6 +145,16 @@ function suggest(now) {
   return [best];
 }
 
+/* Rotating CALL LINE entries (GW1..VAS) belong to a single duty:
+   they expire at the first 07:00 after they were saved. Entries saved
+   within 2h before 07:00 (pre-duty prep for a weekend 24h shift) roll
+   over to the next day's 07:00. Fixed lines (ER/ANE/OR/EICU) never expire. */
+function teamExpiry(ts) {
+  var e = new Date(ts); e.setHours(7, 0, 0, 0);
+  if (e.getTime() <= ts + 2 * HOUR) e = new Date(e.getTime() + DAY);
+  return e.getTime();
+}
+
 function busiestHour(callsMs) {
   if (!callsMs || !callsMs.length) return null;
   var cnt = {};
@@ -286,7 +296,33 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   delete settings.phones; delete settings.quickDial;
   settings.shortcutName = settings.shortcutName || 'DutyCall';
   settings.pickShortcut = settings.pickShortcut || 'PickContact';
+  // v3.3.4 migration: legacy team entries saved without a timestamp are
+  // treated as expired so a stale roster never follows into a new duty.
+  if (!settings.teamStamp && hasTeamEntry()) settings.teamStamp = 0;
   saveSet();
+
+  function hasTeamEntry() {
+    return NAME_ROLES.some(function (r) {
+      return (settings.teamNames[r.k] || '').trim() || (settings.teamTels[r.k] || '').trim();
+    });
+  }
+  /* New duty, new team: wipe rotating entries (fixed lines untouched) */
+  function clearTeam() {
+    NAME_ROLES.forEach(function (r) {
+      delete settings.teamNames[r.k];
+      delete settings.teamTels[r.k];
+    });
+    delete settings.teamStamp;
+    saveSet();
+  }
+  /* No shift running and the roster's duty is over → clear it.
+     While a shift is running, archive() does the clearing instead,
+     so the roster is first preserved into history. */
+  function maybeExpireTeam(nowMs) {
+    if (state.current || !('teamStamp' in settings)) return;
+    if (nowMs >= teamExpiry(settings.teamStamp)) clearTeam();
+  }
+  maybeExpireTeam(Date.now());
 
   // 잘못 잡힌 대기 상태 교정: 시작 전(preStart) 당직이 저장돼 있는데
   // 달력상 지금 진행 중인 당직이 있으면 그 창으로 바꿔준다 (v2.1 → v2.2 버그 픽스)
@@ -350,6 +386,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   function renderAll() {
     var now = new Date();
     if (state.current && now.getTime() > state.current.end + 12 * HOUR) archive(false);
+    maybeExpireTeam(now.getTime());
     document.body.classList.toggle('dawn', state.current ? phase(now) === 'done' : false);
     document.body.classList.toggle('phase-active', activeTab === 'watch' && phase(now) === 'active');
     if (activeTab === 'history') { show('vHistory'); renderHistory(); }
@@ -603,6 +640,7 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     if (state.history.length > 200) state.history.length = 200;
     state.current = null;
     save();
+    clearTeam(); // next duty = new team; roster already copied into history
     if (interactive) { renderAll(); toast('Record saved'); }
   }
 
@@ -864,6 +902,8 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     });
     settings.shortcutName = (els.scName.value.trim() || 'DutyCall');
     settings.pickShortcut = (els.scPick.value.trim() || 'PickContact');
+    if (hasTeamEntry()) settings.teamStamp = Date.now();
+    else delete settings.teamStamp;
     saveSet(); closeSheets();
     renderLine(els.lineGrid1); renderLine(els.lineGrid2);
     toast('Saved');
@@ -1009,7 +1049,7 @@ if (typeof module !== 'undefined' && module.exports) {
     SHIFT_DEFS: SHIFT_DEFS, plausibleStart: plausibleStart, isRedDay: isRedDay,
     shiftWindow: shiftWindow, windowForStart: windowForStart,
     percent: percent, suggest: suggest, fmtHMS: fmtHMS, fmtDur: fmtDur,
-    busiestHour: busiestHour, wmo: wmo, wxIndexFor: wxIndexFor,
+    busiestHour: busiestHour, teamExpiry: teamExpiry, wmo: wmo, wxIndexFor: wxIndexFor,
     messageFor: messageFor, relDay: relDay, fmtWin: fmtWin, fmtDateE: fmtDateE
   };
 }

@@ -75,6 +75,13 @@ eq('relDay today', L.relDay(D(2026, 7, 10, 19, 0), now0), 'Today');
 eq('relDay tomorrow', L.relDay(D(2026, 7, 11, 7, 0), now0), 'Tmrw');
 eq('fmtWin', L.fmtWin({ start: D(2026, 7, 10, 19, 0), end: D(2026, 7, 11, 7, 0) }, now0), 'Today 19:00 → Tmrw 07:00');
 
+// --- 팀 로스터 만료: 저장 후 첫 07:00에 만료 (07:00 직전 2h 내 저장은 익일로)
+eq('teamExpiry Fri19 → Sat07', HH(new Date(L.teamExpiry(D(2026, 7, 10, 19, 0).getTime()))), '2026-7-11 7:00');
+eq('teamExpiry Sat02 (mid-duty) → Sat07', HH(new Date(L.teamExpiry(D(2026, 7, 11, 2, 0).getTime()))), '2026-7-11 7:00');
+eq('teamExpiry Sat0630 (weekend prep) → Sun07', HH(new Date(L.teamExpiry(D(2026, 7, 11, 6, 30).getTime()))), '2026-7-12 7:00');
+eq('teamExpiry Sat08 (24h duty) → Sun07', HH(new Date(L.teamExpiry(D(2026, 7, 11, 8, 0).getTime()))), '2026-7-12 7:00');
+ok('teamExpiry legacy stamp 0 already expired', L.teamExpiry(0) < Date.now());
+
 // --- 최다 시간대
 const calls = [D(2026, 7, 11, 3, 10), D(2026, 7, 11, 3, 40), D(2026, 7, 11, 22, 5)].map(d => d.getTime());
 eq('busiestHour', L.busiestHour(calls), { hour: 3, n: 2 });

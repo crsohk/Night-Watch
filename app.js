@@ -5,7 +5,7 @@
 'use strict';
 
 /* ================= Version (single source of truth for display) ================= */
-var NW_VERSION = 'v3.3.5', NW_BUILD = '260712';
+var NW_VERSION = 'v3.4.0', NW_BUILD = '260713';
 
 /* ================= Constants ================= */
 var SHIFT_DEFS = {
@@ -50,17 +50,18 @@ function isRedDay(d) {
   return !!KR_HOLIDAYS[ymd(d)];
 }
 var HOSPITAL = { name: 'SNUBH GS', short: 'BUNDANG', lat: 37.352, lon: 127.125 };
-var NAME_ROLES = [ // dial by saved number, or by name via Shortcuts
-  { k: 'gw1', label: 'GW1' }, { k: 'gw2', label: 'GW2' },
+var NAME_ROLES = [ // rotating slots: dial by saved number, or by name via Shortcuts
   { k: 'icu', label: 'ICU' }, { k: 'pa',  label: 'PA'  },
   { k: 'cr',  label: 'CR'  }, { k: 'ugi', label: 'UGI' },
   { k: 'hbp', label: 'HBP' }, { k: 'vas', label: 'VAS' }
 ];
-var FIXED_ROLES = [ // fixed lines; numbers never shown on the main screen
+var FIXED_ROLES = [ // fixed lines; numbers never shown on the main screen (or in README)
   { k: 'er',   label: 'ER',   def: '031-787-3001' },
   { k: 'anes', label: 'ANE',  def: '' }, // personal number: never in source - set it in-app via EDIT
   { k: 'or',   label: 'OR',   def: '031-787-3355' },
-  { k: 'eicu', label: 'EICU', def: '031-787-3700' }
+  { k: 'eicu', label: 'EICU', def: '031-787-3700' },
+  { k: 'gw1',  label: 'GW1',  def: '010-7343-7128' }, // ward duty phones: fixed per Prof. Oh (v3.4.0)
+  { k: 'gw2',  label: 'GW2',  def: '010-9924-7129' }
 ];
 var LS_STATE = 'nw:v1', LS_SET = 'nw:set:v1', LS_WX = 'nw:wx:v1';
 var DAY = 86400000, HOUR = 3600000;
@@ -150,10 +151,10 @@ function suggest(now) {
   return [best];
 }
 
-/* Rotating CALL LINE entries (GW1..VAS) belong to a single duty:
+/* Rotating CALL LINE entries (ICU..VAS) belong to a single duty:
    they expire at the first 07:00 after they were saved. Entries saved
    within 2h before 07:00 (pre-duty prep for a weekend 24h shift) roll
-   over to the next day's 07:00. Fixed lines (ER/ANE/OR/EICU) never expire. */
+   over to the next day's 07:00. Fixed lines (ER/ANE/OR/EICU/GW1/GW2) never expire. */
 function teamExpiry(ts) {
   var e = new Date(ts); e.setHours(7, 0, 0, 0);
   if (e.getTime() <= ts + 2 * HOUR) e = new Date(e.getTime() + DAY);
@@ -299,6 +300,13 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     if (!settings.fixed[r.k]) settings.fixed[r.k] = r.def;
   });
   delete settings.phones; delete settings.quickDial;
+  // v3.4.0 migration: GW1/GW2 became fixed lines. A number previously typed
+  // into the rotating slot wins over the default; stale slot entries are removed.
+  ['gw1', 'gw2'].forEach(function (k) {
+    var t = (settings.teamTels[k] || '').trim();
+    if (t) settings.fixed[k] = t;
+    delete settings.teamNames[k]; delete settings.teamTels[k];
+  });
   settings.shortcutName = settings.shortcutName || 'DutyCall';
   settings.pickShortcut = settings.pickShortcut || 'PickContact';
   // v3.3.4 migration: legacy team entries saved without a timestamp are
@@ -510,12 +518,12 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   var TEL_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A7A61" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.4c1 .3 2 .5 3 .6a2 2 0 0 1 1.6 2z"/></svg>';
   function renderLine(grid) {
     var html = '';
-    FIXED_ROLES.forEach(function (r) { // row 1: ER ANE OR EICU
+    FIXED_ROLES.forEach(function (r) { // rows 1-2: ER ANE OR EICU / GW1 GW2 ...
       var num = cleanNum(settings.fixed[r.k]);
       html += '<button class="mate' + (num ? '' : ' no-num') + '" data-fixed-role="' + r.k + '" type="button">' +
         '<span class="role">' + r.label + '</span>' + TEL_ICON + '</button>';
     });
-    NAME_ROLES.forEach(function (r) { // rows 2-3: GW1 GW2 ICU PA / CR UGI HBP VAS
+    NAME_ROLES.forEach(function (r) { // rows 2-3: ... ICU PA / CR UGI HBP VAS
       var nm = settings.teamNames[r.k] || '';
       var ready = nm || cleanNum(settings.teamTels[r.k]);
       html += '<button class="mate' + (ready ? '' : ' no-num') + '" data-name-role="' + r.k + '" type="button">' +

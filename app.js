@@ -5,7 +5,7 @@
 'use strict';
 
 /* ================= Version (single source of truth for display) ================= */
-var NW_VERSION = 'v3.4.0', NW_BUILD = '260713';
+var NW_VERSION = 'v3.5.0', NW_BUILD = '260720';
 
 /* ================= Constants ================= */
 var SHIFT_DEFS = {
@@ -50,7 +50,7 @@ function isRedDay(d) {
   return !!KR_HOLIDAYS[ymd(d)];
 }
 var HOSPITAL = { name: 'SNUBH GS', short: 'BUNDANG', lat: 37.352, lon: 127.125 };
-var NAME_ROLES = [ // rotating slots: dial by saved number, or by name via Shortcuts
+var NAME_ROLES = [ // rotating slots: dial by saved number (tel: only)
   { k: 'icu', label: 'ICU' }, { k: 'pa',  label: 'PA'  },
   { k: 'cr',  label: 'CR'  }, { k: 'ugi', label: 'UGI' },
   { k: 'hbp', label: 'HBP' }, { k: 'vas', label: 'VAS' }
@@ -307,8 +307,8 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     if (t) settings.fixed[k] = t;
     delete settings.teamNames[k]; delete settings.teamTels[k];
   });
-  settings.shortcutName = settings.shortcutName || 'DutyCall';
-  settings.pickShortcut = settings.pickShortcut || 'PickContact';
+  // v3.5.0: Shortcuts integration removed - plain tel: links only.
+  delete settings.shortcutName; delete settings.pickShortcut;
   // v3.3.4 migration: legacy team entries saved without a timestamp are
   // treated as expired so a stale roster never follows into a new duty.
   if (!settings.teamStamp && hasTeamEntry()) settings.teamStamp = 0;
@@ -378,7 +378,6 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     chartBox: $('chartBox'), chartBars: $('chartBars'), hxList: $('hxList'), hxEmpty: $('hxEmpty'),
     btnClearHx: $('btnClearHx'),
     scrim: $('scrim'), sheet: $('sheet'), teamForm: $('teamForm'), fixedForm: $('fixedForm'),
-    scName: $('scName'), scPick: $('scPick'), pasteBar: $('pasteBar'),
     sheetSave: $('sheetSave'), sheetCancel: $('sheetCancel'),
     logSheet: $('logSheet'), logList: $('logList'), logCount: $('logCount'),
     btnEndShift: $('btnEndShift'), logClose: $('logClose'),
@@ -510,11 +509,6 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
 
   /* ---------- Call line (numbers never shown on cards) ---------- */
   function cleanNum(num) { return String(num || '').replace(/[^0-9+#*]/g, ''); }
-  function callByShortcut(name) {
-    location.href = 'shortcuts://run-shortcut?name=' +
-      encodeURIComponent(settings.shortcutName || 'DutyCall') +
-      '&input=text&text=' + encodeURIComponent(name);
-  }
   var TEL_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A7A61" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.4c1 .3 2 .5 3 .6a2 2 0 0 1 1.6 2z"/></svg>';
   function renderLine(grid) {
     var html = '';
@@ -534,11 +528,9 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     grid.querySelectorAll('[data-name-role]').forEach(function (b) {
       b.addEventListener('click', function () {
         var k = b.getAttribute('data-name-role');
-        var nm = settings.teamNames[k];
         var tel = cleanNum(settings.teamTels[k]);
         if (tel) { location.href = 'tel:' + tel; return; }
-        if (nm) { callByShortcut(nm); return; }
-        openSheet(); toast('Add a name first');
+        openSheet(); toast('Add a number first');
       });
     });
     grid.querySelectorAll('[data-fixed-role]').forEach(function (b) {
@@ -803,8 +795,9 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   }
 
   /* ---------- Edit sheet & contact picking ---------- */
+  /* v3.5.0: Shortcuts round-trip removed. Native Contact Picker API only;
+     without it, rows are plain name/number inputs. */
   var hasPicker = ('contacts' in navigator && 'select' in navigator.contacts);
-  var pendingPick = null; // role key waiting for shortcut-clipboard round trip
   function nativePick(k) {
     navigator.contacts.select(['name', 'tel'], { multiple: false }).then(function (res) {
       if (!res || !res.length) return;
@@ -814,40 +807,14 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       if (tEl && c.tel && c.tel.length) tEl.value = c.tel[0];
     }).catch(function () { /* user cancelled */ });
   }
-  function shortcutPick(k) {
-    pendingPick = k;
-    location.href = 'shortcuts://run-shortcut?name=' +
-      encodeURIComponent(settings.pickShortcut || 'PickContact');
-  }
-  function roleLabelOf(k) {
-    for (var i = 0; i < NAME_ROLES.length; i++) if (NAME_ROLES[i].k === k) return NAME_ROLES[i].label;
-    return k;
-  }
-  function updatePasteBar() {
-    if (pendingPick) {
-      els.pasteBar.textContent = 'PASTE ' + roleLabelOf(pendingPick) + ' FROM CONTACTS';
-      els.pasteBar.classList.add('on');
-    } else els.pasteBar.classList.remove('on');
-  }
-  function parsePicked(text) {
-    var tel = '', name = '';
-    String(text).split(/[\n|]/).forEach(function (line) {
-      var t = line.trim();
-      if (!t) return;
-      if (!tel && /^[\d\s\-+().#*]{7,}$/.test(t)) tel = t;
-      else if (!name && !/^[\d\s\-+().#*]+$/.test(t)) name = t;
-    });
-    return { name: name, tel: tel };
-  }
-  document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible') updatePasteBar();
-  });
   function openSheet() {
     var tf = '';
     NAME_ROLES.forEach(function (r) {
-      tf += '<div class="f-row trio"><span class="rl">' + r.label + '</span>' +
-        '<button class="pick-btn" data-pick="' + r.k + '" type="button" aria-label="Pick from contacts">' +
-        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></button>' +
+      tf += '<div class="f-row ' + (hasPicker ? 'trio' : 'duo') + '"><span class="rl">' + r.label + '</span>' +
+        (hasPicker
+          ? '<button class="pick-btn" data-pick="' + r.k + '" type="button" aria-label="Pick from contacts">' +
+            '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></button>'
+          : '') +
         '<input class="f-in" id="tn_' + r.k + '" placeholder="Name" autocomplete="off" value="' + esc(settings.teamNames[r.k] || '') + '">' +
         '<input class="f-in" id="tt_' + r.k + '" placeholder="Number" inputmode="tel" autocomplete="off" value="' + esc(settings.teamTels[r.k] || '') + '">' +
         '</div>';
@@ -855,34 +822,17 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     els.teamForm.innerHTML = tf;
     els.teamForm.querySelectorAll('[data-pick]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var k = b.getAttribute('data-pick');
-        if (hasPicker) nativePick(k); else shortcutPick(k);
+        nativePick(b.getAttribute('data-pick'));
       });
     });
-    updatePasteBar();
     var ff = '';
     FIXED_ROLES.forEach(function (r) {
       ff += '<div class="f-row"><span class="rl">' + r.label + '</span>' +
         '<input class="f-in" id="fn_' + r.k + '" placeholder="Number" inputmode="tel" autocomplete="off" value="' + esc(settings.fixed[r.k] || '') + '"></div>';
     });
     els.fixedForm.innerHTML = ff;
-    els.scName.value = settings.shortcutName || 'DutyCall';
-    els.scPick.value = settings.pickShortcut || 'PickContact';
     overlayOpen(els.sheet);
   }
-  els.pasteBar.addEventListener('click', function () {
-    var k = pendingPick;
-    if (!k || !navigator.clipboard || !navigator.clipboard.readText) return;
-    navigator.clipboard.readText().then(function (text) {
-      var p = parsePicked(text);
-      var nEl = $('tn_' + k), tEl = $('tt_' + k);
-      if (nEl && p.name) nEl.value = p.name;
-      if (tEl && p.tel) tEl.value = p.tel;
-      pendingPick = null;
-      updatePasteBar();
-      if (!p.name && !p.tel) toast('Clipboard had no contact. Run PickContact first.');
-    }).catch(function () { toast('Allow paste to fill from Contacts'); });
-  });
   var lastFocus = null;
   function overlayOpen(el) {
     lastFocus = document.activeElement;
@@ -914,8 +864,6 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
       var n = $('fn_' + r.k);
       if (n) settings.fixed[r.k] = n.value.trim();
     });
-    settings.shortcutName = (els.scName.value.trim() || 'DutyCall');
-    settings.pickShortcut = (els.scPick.value.trim() || 'PickContact');
     if (hasTeamEntry()) settings.teamStamp = Date.now();
     else delete settings.teamStamp;
     saveSet(); closeSheets();

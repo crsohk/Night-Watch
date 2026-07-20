@@ -359,6 +359,7 @@ body.dark .intro{background:linear-gradient(180deg,#1A1309 0%,var(--bg0) 55%,var
 .sheet .hint b{color:var(--ink-2);}
 .f-row{display:grid;grid-template-columns:64px 1fr;gap:9px;align-items:center;margin-top:10px;}
 .f-row.trio{grid-template-columns:42px 40px 1fr 1fr;}
+.f-row.duo{grid-template-columns:42px 1fr 1fr;}
 .f-row .rl{font-size:.72rem;font-weight:900;letter-spacing:.04em;color:var(--amber);}
 .f-in{width:100%;background:#fff;border:1px solid var(--line);border-radius:11px;
   padding:10px 12px;color:var(--ink);font-size:16px;outline:none;}
@@ -367,12 +368,6 @@ body.dark .intro{background:linear-gradient(180deg,#1A1309 0%,var(--bg0) 55%,var
 .pick-btn{width:38px;height:40px;border-radius:11px;border:1px solid rgba(169,118,47,.45);background:var(--amber-soft);
   display:flex;align-items:center;justify-content:center;color:var(--amber);}
 .pick-btn:active{transform:scale(.93);}
-.btn-paste{display:none;width:100%;margin-top:12px;height:48px;border-radius:13px;
-  background:var(--amber-soft);border:1px solid rgba(169,118,47,.4);color:var(--ink);
-  font-weight:900;font-size:.9rem;letter-spacing:.08em;}
-.btn-paste.on{display:block;}
-.sc-guide{margin-top:12px;border:1px dashed var(--line);border-radius:12px;padding:11px 13px;font-size:.76rem;color:var(--ink-3);line-height:1.65;}
-.sc-guide b{color:var(--ink-2);}
 .sheet-btns{display:flex;gap:9px;margin-top:18px;}
 .btn-sheet{flex:1;height:50px;border-radius:14px;font-weight:900;font-size:.9rem;letter-spacing:.1em;}
 .btn-sheet.ok{background:linear-gradient(160deg,#37D260,#1E9C43);color:#06280F;}
@@ -603,29 +598,9 @@ body.dark .btn-call,body.dark .btn-start,body.dark .btn-sheet.ok{filter:saturate
   <div class="scrim" id="scrim"></div>
   <div class="sheet" id="sheet" inert aria-hidden="true">
     <h3>CALL LINE SETUP</h3>
-    <p class="hint"><b>ICU · PA · CR · UGI · HBP · VAS</b> - tap the <b>contact button</b> on the left of a row to pull name and number from your address book. With a number saved, tapping the card dials instantly. <b>ER · ANE · OR · EICU · GW1 · GW2</b> are fixed lines. Numbers never appear on the main screen.</p>
-    <button class="btn-paste" id="pasteBar" type="button">PASTE FROM CONTACTS</button>
+    <p class="hint"><b>ICU · PA · CR · UGI · HBP · VAS</b> - type a name and number for each row. With a number saved, tapping the card dials instantly. <b>ER · ANE · OR · EICU · GW1 · GW2</b> are fixed lines. Numbers never appear on the main screen.</p>
     <div id="teamForm"></div>
     <div id="fixedForm" style="margin-top:14px"></div>
-    <details class="sc-guide" id="scGuide">
-      <summary><b>Contact button setup (once, 2 min)</b></summary>
-      <div style="margin-top:7px">
-      <b>Option A - native picker (best):</b> iPhone Settings → Apps → Safari →
-      Advanced → Feature Flags → turn on <b>Contact Picker API</b>.
-      The contact button then opens your address book directly.<br><br>
-      <b>Option B - picker shortcut:</b> Shortcuts app → ＋ →<br>
-      1. <b>Select Contact</b><br>
-      2. <b>Text</b>: insert the contact variable, new line, then its <b>Phone Number</b><br>
-      3. <b>Copy to Clipboard</b> → save as <b>PickContact</b>.<br>
-      The contact button runs it, then tap PASTE FROM CONTACTS here.<br><br>
-      <b>Dial-by-name shortcut (optional):</b> ＋ → <b>Find Contacts</b>
-      (Name contains Shortcut Input, limit 1) → <b>Call</b> → save as <b>DutyCall</b>.
-      </div>
-    </details>
-    <div class="f-row" style="margin-top:12px"><span class="rl">DIAL SC</span>
-      <input class="f-in" id="scName" placeholder="DutyCall"></div>
-    <div class="f-row"><span class="rl">PICK SC</span>
-      <input class="f-in" id="scPick" placeholder="PickContact"></div>
     <div class="sheet-btns">
       <button class="btn-sheet no" id="sheetCancel" type="button">CLOSE</button>
       <button class="btn-sheet ok" id="sheetSave" type="button">SAVE</button>

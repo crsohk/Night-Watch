@@ -1,6 +1,6 @@
 /* Night Watch — offline-first service worker */
 'use strict';
-const VERSION = 'nightwatch-v3.5.0';
+const VERSION = 'nightwatch-v3.5.1';
 
 /* 핵심 자산: 이것들이 캐시되어야 오프라인 구동이 보장된다 */
 const CORE = [

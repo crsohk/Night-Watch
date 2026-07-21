@@ -5,7 +5,7 @@
 'use strict';
 
 /* ================= Version (single source of truth for display) ================= */
-var NW_VERSION = 'v3.5.0', NW_BUILD = '260720';
+var NW_VERSION = 'v3.5.1', NW_BUILD = '260721';
 
 /* ================= Constants ================= */
 var SHIFT_DEFS = {
@@ -795,9 +795,9 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   }
 
   /* ---------- Edit sheet & contact picking ---------- */
-  /* v3.5.0: Shortcuts round-trip removed. Native Contact Picker API only;
-     without it, rows are plain name/number inputs. */
-  var hasPicker = ('contacts' in navigator && 'select' in navigator.contacts);
+  /* v3.5.1: contact button always visible; opens the native Contact Picker.
+     No Shortcuts. If the picker API is off, points to the Safari flag guide. */
+  function hasPicker() { return ('contacts' in navigator && 'select' in navigator.contacts); }
   function nativePick(k) {
     navigator.contacts.select(['name', 'tel'], { multiple: false }).then(function (res) {
       if (!res || !res.length) return;
@@ -810,11 +810,9 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
   function openSheet() {
     var tf = '';
     NAME_ROLES.forEach(function (r) {
-      tf += '<div class="f-row ' + (hasPicker ? 'trio' : 'duo') + '"><span class="rl">' + r.label + '</span>' +
-        (hasPicker
-          ? '<button class="pick-btn" data-pick="' + r.k + '" type="button" aria-label="Pick from contacts">' +
-            '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></button>'
-          : '') +
+      tf += '<div class="f-row trio"><span class="rl">' + r.label + '</span>' +
+        '<button class="pick-btn" data-pick="' + r.k + '" type="button" aria-label="Pick from contacts">' +
+        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></button>' +
         '<input class="f-in" id="tn_' + r.k + '" placeholder="Name" autocomplete="off" value="' + esc(settings.teamNames[r.k] || '') + '">' +
         '<input class="f-in" id="tt_' + r.k + '" placeholder="Number" inputmode="tel" autocomplete="off" value="' + esc(settings.teamTels[r.k] || '') + '">' +
         '</div>';
@@ -822,7 +820,10 @@ if (typeof document !== 'undefined' && document.getElementById('app')) (function
     els.teamForm.innerHTML = tf;
     els.teamForm.querySelectorAll('[data-pick]').forEach(function (b) {
       b.addEventListener('click', function () {
-        nativePick(b.getAttribute('data-pick'));
+        if (hasPicker()) { nativePick(b.getAttribute('data-pick')); return; }
+        var g = $('pickGuide');
+        if (g) { g.open = true; g.scrollIntoView({ block: 'nearest' }); }
+        toast('Turn on Contact Picker API first (guide below)');
       });
     });
     var ff = '';
